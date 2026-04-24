@@ -182,13 +182,15 @@ def _resolve_history(
     if cache.has_year(symbol, year):
         if not is_current_year:
             path = cache.year_path(symbol, year)
+            rows = cache.read_year(symbol, year)
             last_timestamp = cache.latest_timestamp(symbol, year)
-            return "cache_hit", str(path), len(cache.read_year(symbol, year)), last_timestamp
+            return "cache_hit", str(path), len(rows), last_timestamp
 
         latest = cache.latest_timestamp(symbol, year)
         if latest is not None and latest.date() >= today:
             path = cache.year_path(symbol, year)
-            return "cache_hit", str(path), len(cache.read_year(symbol, year)), latest
+            rows = cache.read_year(symbol, year)
+            return "cache_hit", str(path), len(rows), latest
 
         start_date = date(year, 1, 1) if latest is None else latest.date() + timedelta(days=1)
         end_date = today + timedelta(days=1)
@@ -196,10 +198,12 @@ def _resolve_history(
         if not new_rows:
             path = cache.year_path(symbol, year)
             last_timestamp = cache.latest_timestamp(symbol, year)
-            return "cache_hit", str(path), len(cache.read_year(symbol, year)), last_timestamp
+            rows = cache.read_year(symbol, year)
+            return "cache_hit", str(path), len(rows), last_timestamp
         path = cache.merge_year(symbol, year, new_rows)
         last_timestamp = cache.latest_timestamp(symbol, year)
-        return "cache_refresh", path, len(cache.read_year(symbol, year)), last_timestamp
+        rows = cache.read_year(symbol, year)
+        return "cache_refresh", path, len(rows), last_timestamp
 
     rows = client.fetch_history_year(symbol, year)
     path = cache.write_year(symbol, year, rows)
@@ -212,10 +216,11 @@ def _utc_now() -> datetime:
 
 
 def _make_run_dir(output_dir: str) -> str:
-    run_dir = Path(output_dir) / _utc_now().strftime("%Y-%m-%dT%H-%MZ")
+    stamp = _utc_now().strftime("%Y-%m-%dT%H-%MZ")
+    run_dir = Path(output_dir) / stamp
     counter = 1
     while run_dir.exists():
-        run_dir = Path(output_dir) / f"{_utc_now().strftime('%Y-%m-%dT%H-%MZ')}-{counter}"
+        run_dir = Path(output_dir) / f"{stamp}-{counter}"
         counter += 1
     run_dir.mkdir(parents=True, exist_ok=False)
     return str(run_dir)

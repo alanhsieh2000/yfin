@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import date, datetime, time, timedelta, timezone
+from io import StringIO
 
 import pandas as pd
 import yfinance as yf
@@ -16,7 +18,7 @@ class YahooFinanceClient:
 
     def fetch_quote(self, symbol: str) -> QuoteSnapshot:
         ticker = yf.Ticker(symbol)
-        info = ticker.info or {}
+        info = self._read_ticker_info(ticker) or {}
 
         currency = info.get("currency")
         market_price = info.get("regularMarketPrice")
@@ -60,12 +62,12 @@ class YahooFinanceClient:
             return []
 
         ticker = yf.Ticker(symbol)
-        history = ticker.history(
-            start=start_date.isoformat(),
-            end=end_date.isoformat(),
-            interval="1d",
-            actions=True,
-            auto_adjust=False,
+        history = self._read_ticker_history(
+            ticker,
+            symbol=symbol,
+            year=year,
+            start_date=start_date,
+            end_date=end_date,
         )
         return self._normalize_history(symbol, history)
 
@@ -118,3 +120,34 @@ class YahooFinanceClient:
         if timestamp.hour == 0 and timestamp.minute == 0 and timestamp.second == 0:
             return datetime.combine(timestamp.date(), time.min, tzinfo=timezone.utc)
         return timestamp.to_pydatetime()
+
+    @staticmethod
+    def _read_ticker_info(ticker: yf.Ticker) -> dict:
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            try:
+                return ticker.info
+            except Exception:
+                return {}
+
+    @staticmethod
+    def _read_ticker_history(
+        ticker: yf.Ticker,
+        *,
+        symbol: str,
+        year: int,
+        start_date: date,
+        end_date: date,
+    ) -> pd.DataFrame:
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            try:
+                return ticker.history(
+                    start=start_date.isoformat(),
+                    end=end_date.isoformat(),
+                    interval="1d",
+                    actions=True,
+                    auto_adjust=False,
+                )
+            except Exception as exc:
+                raise ValueError(
+                    f"history data for {symbol} in {year} could not be retrieved: {exc}"
+                ) from exc

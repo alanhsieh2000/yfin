@@ -30,6 +30,9 @@ The observable outcome is a resilient fetch command. When one symbol-year succee
 - Observation: A current-year cache hit is not a terminal outcome until the cached latest date has been compared with today.
   Evidence: The current-year refresh requirement means a local file may exist but still need newer rows appended.
 
+- Observation: Suppressing raw `yfinance` stderr/stdout noise makes partial-failure runs easier to read without changing repository-owned error handling.
+  Evidence: A live rerun on 2026-04-24 for `/tmp/yfplan3/watchlist.csv` emitted only `Error: quote data for NOT_A_REAL_SYMBOL is missing currency` plus the repository summary, instead of the earlier raw HTTP 404 line from the underlying library.
+
 ## Decision Log
 
 - Decision: Continue the batch when one symbol-year fails, record the failure in `manifest.json`, and return non-zero only if no requested symbol-year succeeded, was reused, or was refreshed.
@@ -49,6 +52,8 @@ The observable outcome is a resilient fetch command. When one symbol-year succee
 This milestone should turn the project from a prototype into a dependable local tool. If it succeeds, the operator-facing workflow will be documented in `/README.md`, failures will be visible and attributable at the year level, and reruns will not damage earlier outputs. After completion, future work can focus on optional enhancements such as richer query surfaces, not on core correctness.
 
 Implementation completed on 2026-04-24. The repository now records year-level outcomes through repository-owned result types, writes manifests with explicit counts for `cache_hit`, `cache_refresh`, `fetched`, and `failed`, supports `--fail-fast`, and documents the full setup and operating workflow in `/README.md`.
+
+A cleanup pass on 2026-04-24 also removed noisy third-party console output during quote and history retrieval, stabilized run-directory naming, and kept the live rerun behavior aligned with the plan: past-year cache hits remain unchanged while current-year files may refresh when newer rows are available.
 
 ## Context and Orientation
 

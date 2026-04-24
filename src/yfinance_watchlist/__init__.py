@@ -1,0 +1,2 @@
+"""Yahoo Finance watchlist package."""
+

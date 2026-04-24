@@ -1,0 +1,65 @@
+from __future__ import annotations
+
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+from unittest import TestCase
+
+from yfinance_watchlist.cache import HistoryCache
+from yfinance_watchlist.models import PriceHistoryRow
+
+
+class HistoryCacheTestCase(TestCase):
+    def test_cache_hit_skips_refetch_for_past_year(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = HistoryCache(tmpdir)
+            cache.write_year("AAPL", 2025, [self._row("2025-01-02T00:00:00+00:00", 0.0)])
+
+            self.assertTrue(cache.has_year("AAPL", 2025))
+            self.assertEqual(cache.latest_timestamp("AAPL", 2025), datetime(2025, 1, 2, tzinfo=timezone.utc))
+            self.assertEqual(len(cache.read_year("AAPL", 2025)), 1)
+
+    def test_current_year_refresh_merges_new_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = HistoryCache(tmpdir)
+            cache.write_year("AAPL", 2026, [self._row("2026-01-02T00:00:00+00:00", 0.0)])
+
+            cache.merge_year(
+                "AAPL",
+                2026,
+                [
+                    self._row("2026-01-02T00:00:00+00:00", 0.0),
+                    self._row("2026-01-03T00:00:00+00:00", 0.25),
+                ],
+            )
+
+            rows = cache.read_year("AAPL", 2026)
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[-1].dividend, 0.25)
+        self.assertEqual(rows[-1].timestamp, datetime(2026, 1, 3, tzinfo=timezone.utc))
+
+    def test_current_year_cache_is_noop_when_latest_timestamp_is_current(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = HistoryCache(tmpdir)
+            row = self._row("2026-04-24T00:00:00+00:00", 0.0)
+            cache.write_year("AAPL", 2026, [row])
+
+            latest = cache.latest_timestamp("AAPL", 2026)
+            rows = cache.read_year("AAPL", 2026)
+
+        self.assertEqual(latest, datetime(2026, 4, 24, tzinfo=timezone.utc))
+        self.assertEqual(rows, [row])
+
+    @staticmethod
+    def _row(timestamp: str, dividend: float) -> PriceHistoryRow:
+        value = datetime.fromisoformat(timestamp)
+        return PriceHistoryRow(
+            timestamp=value,
+            open=100.0,
+            high=101.0,
+            low=99.0,
+            close=100.5,
+            volume=1000,
+            dividend=dividend,
+        )

@@ -19,11 +19,32 @@ class YahooFinanceClient:
     def fetch_quote(self, symbol: str) -> QuoteSnapshot:
         ticker = yf.Ticker(symbol)
         info = self._read_ticker_info(ticker) or {}
+        fast_info = self._read_ticker_fast_info(ticker) or {}
+        history_metadata = self._read_ticker_history_metadata(ticker) or {}
+        latest_history_timestamp = self._read_latest_history_timestamp(ticker)
 
-        currency = info.get("currency")
-        market_price = info.get("regularMarketPrice")
-        market_time_raw = info.get("regularMarketTime")
+        currency = self._first_present(
+            info.get("currency"),
+            info.get("financialCurrency"),
+            fast_info.get("currency"),
+            history_metadata.get("currency"),
+        )
+        market_price = self._first_present(
+            info.get("regularMarketPrice"),
+            info.get("currentPrice"),
+            fast_info.get("regularMarketPrice"),
+            fast_info.get("lastPrice"),
+            history_metadata.get("regularMarketPrice"),
+        )
+        market_time_raw = self._first_present(
+            info.get("regularMarketTime"),
+            history_metadata.get("regularMarketTime"),
+            self._history_metadata_trading_start(history_metadata),
+            latest_history_timestamp,
+        )
 
+        if currency in (None, "") and market_price is None and latest_history_timestamp is None:
+            raise ValueError(f"quote data for {symbol} is unavailable")
         if currency in (None, ""):
             raise ValueError(f"quote data for {symbol} is missing currency")
         if market_price is None:
@@ -31,7 +52,7 @@ class YahooFinanceClient:
         if market_time_raw is None:
             raise ValueError(f"quote data for {symbol} is missing regular market time")
 
-        market_time = datetime.fromtimestamp(market_time_raw, tz=timezone.utc)
+        market_time = self._normalize_quote_timestamp(market_time_raw)
         return QuoteSnapshot(
             symbol=symbol,
             currency=str(currency),
@@ -121,6 +142,31 @@ class YahooFinanceClient:
             return datetime.combine(timestamp.date(), time.min, tzinfo=timezone.utc)
         return timestamp.to_pydatetime()
 
+    @classmethod
+    def _normalize_quote_timestamp(cls, value: object) -> datetime:
+        if isinstance(value, (int, float)):
+            return datetime.fromtimestamp(value, tz=timezone.utc)
+        return cls._normalize_timestamp(value)
+
+    @staticmethod
+    def _first_present(*values: object) -> object | None:
+        for value in values:
+            if value not in (None, ""):
+                return value
+        return None
+
+    @staticmethod
+    def _history_metadata_trading_start(history_metadata: dict) -> object | None:
+        current_period = history_metadata.get("currentTradingPeriod")
+        if not isinstance(current_period, dict):
+            return None
+
+        regular_period = current_period.get("regular")
+        if not isinstance(regular_period, dict):
+            return None
+
+        return regular_period.get("start")
+
     @staticmethod
     def _read_ticker_info(ticker: yf.Ticker) -> dict:
         with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
@@ -128,6 +174,37 @@ class YahooFinanceClient:
                 return ticker.info
             except Exception:
                 return {}
+
+    @staticmethod
+    def _read_ticker_fast_info(ticker: yf.Ticker) -> dict:
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            try:
+                fast_info = ticker.fast_info
+                if hasattr(fast_info, "items"):
+                    return dict(fast_info.items())
+                return dict(fast_info)
+            except Exception:
+                return {}
+
+    @staticmethod
+    def _read_ticker_history_metadata(ticker: yf.Ticker) -> dict:
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            try:
+                return ticker.get_history_metadata()
+            except Exception:
+                return {}
+
+    @classmethod
+    def _read_latest_history_timestamp(cls, ticker: yf.Ticker) -> datetime | None:
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            try:
+                history = ticker.history(period="5d", interval="1d", actions=False, auto_adjust=False)
+            except Exception:
+                return None
+
+        if history.empty:
+            return None
+        return cls._normalize_timestamp(history.index[-1])
 
     @staticmethod
     def _read_ticker_history(

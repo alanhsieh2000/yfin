@@ -27,6 +27,38 @@ class YahooFinanceClientTestCase(TestCase):
         self.assertEqual(quote.market_time, datetime.fromtimestamp(1776988800, tz=timezone.utc))
 
     @patch("yfinance_watchlist.client.yf.Ticker")
+    def test_fetch_quote_falls_back_to_fast_info_and_history_metadata(
+        self, ticker_cls: MagicMock
+    ) -> None:
+        ticker = ticker_cls.return_value
+        ticker.info = {}
+        ticker.fast_info.items.return_value = {
+            "currency": "USD",
+            "lastPrice": 234.56,
+        }.items()
+        ticker.get_history_metadata.return_value = {
+            "currentTradingPeriod": {"regular": {"start": 1776988800}},
+        }
+
+        quote = YahooFinanceClient().fetch_quote("AAPL")
+
+        self.assertEqual(quote.symbol, "AAPL")
+        self.assertEqual(quote.currency, "USD")
+        self.assertEqual(quote.market_price, 234.56)
+        self.assertEqual(quote.market_time, datetime.fromtimestamp(1776988800, tz=timezone.utc))
+
+    @patch("yfinance_watchlist.client.yf.Ticker")
+    def test_fetch_quote_rejects_empty_quote_payload(self, ticker_cls: MagicMock) -> None:
+        ticker = ticker_cls.return_value
+        ticker.info = {}
+        ticker.fast_info.items.return_value = {}.items()
+        ticker.get_history_metadata.return_value = {}
+        ticker.history.return_value = pd.DataFrame()
+
+        with self.assertRaisesRegex(ValueError, "quote data for APPL is unavailable"):
+            YahooFinanceClient().fetch_quote("APPL")
+
+    @patch("yfinance_watchlist.client.yf.Ticker")
     def test_fetch_history_uses_year_windows_for_past_years(self, ticker_cls: MagicMock) -> None:
         ticker = ticker_cls.return_value
         ticker.history.return_value = self._history_frame()
@@ -96,4 +128,3 @@ class YahooFinanceClientTestCase(TestCase):
             },
             index=pd.to_datetime(["2025-01-02", "2025-01-03"]),
         )
-

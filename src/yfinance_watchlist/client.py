@@ -115,6 +115,9 @@ class YahooFinanceClient:
             dividend = row.get("Dividends", 0)
             if pd.isna(dividend):
                 dividend = 0
+            stock_splits = row.get("Stock Splits", 0)
+            if pd.isna(stock_splits):
+                stock_splits = 0
             volume = row["Volume"]
             if pd.isna(volume):
                 volume = 0
@@ -127,6 +130,7 @@ class YahooFinanceClient:
                     close=self._round_history_value(row["Close"]),
                     volume=int(volume),
                     dividend=self._round_history_value(dividend),
+                    stock_splits=self._round_history_value(stock_splits),
                 )
             )
         return rows

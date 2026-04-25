@@ -27,4 +27,4 @@ class PriceHistoryRow:
     close: float
     volume: int
     dividend: float
-
+    stock_splits: float

@@ -96,6 +96,8 @@ class YahooFinanceClientTestCase(TestCase):
 
         self.assertEqual(rows[0].dividend, 0.0)
         self.assertEqual(rows[1].dividend, 0.25)
+        self.assertEqual(rows[0].stock_splits, 0.0)
+        self.assertEqual(rows[1].stock_splits, 2.0)
         self.assertEqual(rows[0].timestamp, datetime(2025, 1, 2, tzinfo=timezone.utc))
 
     @patch("yfinance_watchlist.client.yf.Ticker")
@@ -109,6 +111,7 @@ class YahooFinanceClientTestCase(TestCase):
                 "Close": [46.48500000000001],
                 "Volume": [1000],
                 "Dividends": [0.125],
+                "Stock Splits": [4.0000001],
             },
             index=pd.to_datetime(["2025-01-02"]),
         )
@@ -120,6 +123,7 @@ class YahooFinanceClientTestCase(TestCase):
         self.assertEqual(rows[0].low, 46.48)
         self.assertEqual(rows[0].close, 46.49)
         self.assertEqual(rows[0].dividend, 0.12)
+        self.assertEqual(rows[0].stock_splits, 4.0)
 
     @patch("yfinance_watchlist.client.yf.Ticker")
     def test_fetch_history_rejects_future_year(self, ticker_cls: MagicMock) -> None:
@@ -148,6 +152,7 @@ class YahooFinanceClientTestCase(TestCase):
                 "Close": [100.5, 101.5],
                 "Volume": [1000, 1200],
                 "Dividends": [0.0, 0.25],
+                "Stock Splits": [0.0, 2.0],
             },
             index=pd.to_datetime(["2025-01-02", "2025-01-03"]),
         )

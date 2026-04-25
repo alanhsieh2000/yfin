@@ -35,6 +35,7 @@ class HistoryCache:
                         close=float(row["close"]),
                         volume=int(row["volume"]),
                         dividend=float(row["dividend"]),
+                        stock_splits=float(row.get("stock_splits", 0)),
                     )
                 )
         return rows
@@ -71,7 +72,16 @@ class HistoryCache:
         with open(temp_path, "w", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(
                 handle,
-                fieldnames=["timestamp", "open", "high", "low", "close", "volume", "dividend"],
+                fieldnames=[
+                    "timestamp",
+                    "open",
+                    "high",
+                    "low",
+                    "close",
+                    "volume",
+                    "dividend",
+                    "stock_splits",
+                ],
             )
             writer.writeheader()
             for row in sorted(rows, key=lambda item: item.timestamp):

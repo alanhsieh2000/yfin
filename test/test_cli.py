@@ -461,4 +461,5 @@ class CliTestCase(TestCase):
             close=100.5,
             volume=1000,
             dividend=dividend,
+            stock_splits=0.0,
         )

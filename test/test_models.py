@@ -21,9 +21,10 @@ class ModelsTestCase(TestCase):
             close=100.5,
             volume=1000,
             dividend=0.25,
+            stock_splits=2.0,
         )
 
         self.assertEqual(entry.symbol, "AAPL")
         self.assertEqual(quote.currency, "USD")
         self.assertEqual(row.dividend, 0.25)
-
+        self.assertEqual(row.stock_splits, 2.0)

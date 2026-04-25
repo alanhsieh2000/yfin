@@ -30,7 +30,7 @@ class HistoryCacheTestCase(TestCase):
                 2026,
                 [
                     self._row("2026-01-02T00:00:00+00:00", 0.0),
-                    self._row("2026-01-03T00:00:00+00:00", 0.25),
+                    self._row("2026-01-03T00:00:00+00:00", 0.25, 2.0),
                 ],
             )
 
@@ -38,6 +38,7 @@ class HistoryCacheTestCase(TestCase):
 
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[-1].dividend, 0.25)
+        self.assertEqual(rows[-1].stock_splits, 2.0)
         self.assertEqual(rows[-1].timestamp, datetime(2026, 1, 3, tzinfo=timezone.utc))
 
     def test_current_year_cache_is_noop_when_latest_timestamp_is_current(self) -> None:
@@ -63,6 +64,7 @@ class HistoryCacheTestCase(TestCase):
                 close=46.49,
                 volume=1000,
                 dividend=0.12,
+                stock_splits=4.0,
             )
 
             cache.write_year("AAPL", 2026, [row])
@@ -75,9 +77,10 @@ class HistoryCacheTestCase(TestCase):
         self.assertEqual(stored["low"], "46.48")
         self.assertEqual(stored["close"], "46.49")
         self.assertEqual(stored["dividend"], "0.12")
+        self.assertEqual(stored["stock_splits"], "4.0")
 
     @staticmethod
-    def _row(timestamp: str, dividend: float) -> PriceHistoryRow:
+    def _row(timestamp: str, dividend: float, stock_splits: float = 0.0) -> PriceHistoryRow:
         value = datetime.fromisoformat(timestamp)
         return PriceHistoryRow(
             timestamp=value,
@@ -87,4 +90,5 @@ class HistoryCacheTestCase(TestCase):
             close=100.5,
             volume=1000,
             dividend=dividend,
+            stock_splits=stock_splits,
         )

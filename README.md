@@ -78,7 +78,7 @@ Historical cache files are shared across runs:
     data/cache/history/<symbol>/<year>.csv
     data/cache/history_index.json
 
-Each yearly history row includes `timestamp`, OHLC data, `volume`, and `dividend`. Past years are reused as `cache_hit` when already present. The current year may be updated as `cache_refresh` when newer rows become available after an earlier run.
+Each yearly history row includes `timestamp`, OHLC data, `volume`, `dividend`, and `stock_splits`. Past years are reused as `cache_hit` when already present. The current year may be updated as `cache_refresh` when newer rows become available after an earlier run.
 
 ## Manifest Interpretation
 

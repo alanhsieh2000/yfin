@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -50,6 +51,30 @@ class HistoryCacheTestCase(TestCase):
 
         self.assertEqual(latest, datetime(2026, 4, 24, tzinfo=timezone.utc))
         self.assertEqual(rows, [row])
+
+    def test_write_year_stores_history_values_rounded_to_two_decimals(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = HistoryCache(tmpdir)
+            row = PriceHistoryRow(
+                timestamp=datetime(2026, 1, 2, tzinfo=timezone.utc),
+                open=47.06,
+                high=47.06,
+                low=46.48,
+                close=46.49,
+                volume=1000,
+                dividend=0.12,
+            )
+
+            cache.write_year("AAPL", 2026, [row])
+
+            with open(Path(tmpdir) / "cache" / "history" / "AAPL" / "2026.csv", newline="", encoding="utf-8") as handle:
+                stored = next(csv.DictReader(handle))
+
+        self.assertEqual(stored["open"], "47.06")
+        self.assertEqual(stored["high"], "47.06")
+        self.assertEqual(stored["low"], "46.48")
+        self.assertEqual(stored["close"], "46.49")
+        self.assertEqual(stored["dividend"], "0.12")
 
     @staticmethod
     def _row(timestamp: str, dividend: float) -> PriceHistoryRow:

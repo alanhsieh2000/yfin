@@ -34,13 +34,37 @@ Fetch a single live quote:
 
     PYTHONPATH=src python -m yfinance_watchlist.cli quote AAPL
 
+Show the current watchlist stored in `watchlist.csv`:
+
+    PYTHONPATH=src python -m yfinance_watchlist.cli show
+
+Add or update a symbol and optional label in `watchlist.csv`:
+
+    PYTHONPATH=src python -m yfinance_watchlist.cli add AAPL Apple
+
+If the label contains spaces, quote it so the shell passes it as one argument:
+
+    PYTHONPATH=src python -m yfinance_watchlist.cli add AAPL "Apple Inc."
+
+If you accidentally type a comma after the symbol, such as `AAPL,`, the command still stores the symbol as `AAPL`.
+
+You can also add a symbol without a label:
+
+    PYTHONPATH=src python -m yfinance_watchlist.cli add SPY
+
+Remove a symbol from `watchlist.csv`:
+
+    PYTHONPATH=src python -m yfinance_watchlist.cli remove AAPL
+
 Fetch quotes plus yearly daily history for a watchlist:
 
-    PYTHONPATH=src python -m yfinance_watchlist.cli fetch --watchlist watchlist.csv --output data --start-year 2025 --end-year 2026
+    PYTHONPATH=src python -m yfinance_watchlist.cli fetch --output data --start-year 2025 --end-year 2026
 
 To stop on the first symbol-year failure instead of continuing:
 
-    PYTHONPATH=src python -m yfinance_watchlist.cli fetch --watchlist watchlist.csv --output data --start-year 2025 --end-year 2026 --fail-fast
+    PYTHONPATH=src python -m yfinance_watchlist.cli fetch --output data --start-year 2025 --end-year 2026 --fail-fast
+
+All watchlist management commands default to `watchlist.csv`, and `fetch` reads the same file unless `--watchlist` is provided explicitly.
 
 ## Output Layout
 

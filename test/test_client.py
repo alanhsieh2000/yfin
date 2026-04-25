@@ -99,6 +99,29 @@ class YahooFinanceClientTestCase(TestCase):
         self.assertEqual(rows[0].timestamp, datetime(2025, 1, 2, tzinfo=timezone.utc))
 
     @patch("yfinance_watchlist.client.yf.Ticker")
+    def test_fetch_history_rounds_float_fields_to_two_decimals(self, ticker_cls: MagicMock) -> None:
+        ticker = ticker_cls.return_value
+        ticker.history.return_value = pd.DataFrame(
+            {
+                "Open": [47.060001373291016],
+                "High": [47.064999999999998],
+                "Low": [46.47999954223633],
+                "Close": [46.48500000000001],
+                "Volume": [1000],
+                "Dividends": [0.125],
+            },
+            index=pd.to_datetime(["2025-01-02"]),
+        )
+
+        rows = YahooFinanceClient().fetch_history("AAPL", 2025, 2025)
+
+        self.assertEqual(rows[0].open, 47.06)
+        self.assertEqual(rows[0].high, 47.06)
+        self.assertEqual(rows[0].low, 46.48)
+        self.assertEqual(rows[0].close, 46.49)
+        self.assertEqual(rows[0].dividend, 0.12)
+
+    @patch("yfinance_watchlist.client.yf.Ticker")
     def test_fetch_history_rejects_future_year(self, ticker_cls: MagicMock) -> None:
         ticker_cls.return_value.history.return_value = self._history_frame()
         client = YahooFinanceClient()

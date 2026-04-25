@@ -9,7 +9,10 @@ from .cache import HistoryCache
 from .client import YahooFinanceClient
 from .results import FetchRunSummary, SymbolYearResult
 from .store import FileStore
-from .watchlist import WatchlistReader
+from .watchlist import WatchlistReader, WatchlistStore
+
+
+DEFAULT_WATCHLIST_PATH = "watchlist.csv"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -19,8 +22,20 @@ def build_parser() -> argparse.ArgumentParser:
     quote_parser = subparsers.add_parser("quote", help="Fetch and print a single quote")
     quote_parser.add_argument("symbol")
 
+    show_parser = subparsers.add_parser("show", help="Show the current watchlist")
+    show_parser.add_argument("--watchlist", default=DEFAULT_WATCHLIST_PATH)
+
+    add_parser = subparsers.add_parser("add", help="Add or update a symbol in the watchlist")
+    add_parser.add_argument("symbol")
+    add_parser.add_argument("label", nargs="?")
+    add_parser.add_argument("--watchlist", default=DEFAULT_WATCHLIST_PATH)
+
+    remove_parser = subparsers.add_parser("remove", help="Remove a symbol from the watchlist")
+    remove_parser.add_argument("symbol")
+    remove_parser.add_argument("--watchlist", default=DEFAULT_WATCHLIST_PATH)
+
     fetch_parser = subparsers.add_parser("fetch", help="Fetch quotes and yearly history for a watchlist")
-    fetch_parser.add_argument("--watchlist", required=True)
+    fetch_parser.add_argument("--watchlist", default=DEFAULT_WATCHLIST_PATH)
     fetch_parser.add_argument("--output", required=True)
     fetch_parser.add_argument("--start-year", type=int, required=True)
     fetch_parser.add_argument("--end-year", type=int, required=True)
@@ -47,6 +62,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Market Time: {quote.market_time.isoformat()}")
         return 0
 
+    if args.command == "show":
+        return run_show_command(args.watchlist)
+
+    if args.command == "add":
+        return run_add_command(args.watchlist, args.symbol, args.label)
+
+    if args.command == "remove":
+        return run_remove_command(args.watchlist, args.symbol)
+
     if args.command == "fetch":
         return run_fetch_command(
             args.watchlist,
@@ -58,6 +82,57 @@ def main(argv: list[str] | None = None) -> int:
 
     parser.error(f"unsupported command: {args.command}")
     return 2
+
+
+def run_show_command(watchlist_path: str) -> int:
+    store = WatchlistStore()
+    try:
+        entries = store.load_entries(watchlist_path)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Watchlist: {watchlist_path}")
+    if not entries:
+        print("No symbols configured.")
+        return 0
+
+    for entry in entries:
+        if entry.label:
+            print(f"{entry.symbol},{entry.label}")
+        else:
+            print(entry.symbol)
+    return 0
+
+
+def run_add_command(watchlist_path: str, symbol: str, label: str | None) -> int:
+    store = WatchlistStore()
+    try:
+        entry = store.add_entry(watchlist_path, symbol, label)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    if entry.label:
+        print(f"Saved {entry.symbol},{entry.label} to {watchlist_path}")
+    else:
+        print(f"Saved {entry.symbol} to {watchlist_path}")
+    return 0
+
+
+def run_remove_command(watchlist_path: str, symbol: str) -> int:
+    store = WatchlistStore()
+    try:
+        entry = store.remove_entry(watchlist_path, symbol)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    if entry.label:
+        print(f"Removed {entry.symbol},{entry.label} from {watchlist_path}")
+    else:
+        print(f"Removed {entry.symbol} from {watchlist_path}")
+    return 0
 
 
 def run_fetch_command(

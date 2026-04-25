@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+from contextlib import chdir
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import date, datetime, timezone
 from io import StringIO
@@ -14,6 +16,197 @@ from yfinance_watchlist.models import PriceHistoryRow, QuoteSnapshot
 
 
 class CliTestCase(TestCase):
+    def test_show_command_prints_current_watchlist(self) -> None:
+        stdout = StringIO()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist = Path(tmpdir) / "watchlist.csv"
+            watchlist.write_text("symbol,label\nAAPL,Apple\nSPY,S&P 500 ETF\n", encoding="utf-8")
+
+            with redirect_stdout(stdout):
+                exit_code = main(["show", "--watchlist", str(watchlist)])
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(
+            stdout.getvalue().strip().splitlines(),
+            [
+                f"Watchlist: {watchlist}",
+                "AAPL,Apple",
+                "SPY,S&P 500 ETF",
+            ],
+        )
+
+    def test_show_command_reports_empty_watchlist(self) -> None:
+        stdout = StringIO()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist = Path(tmpdir) / "watchlist.csv"
+
+            with redirect_stdout(stdout):
+                exit_code = main(["show", "--watchlist", str(watchlist)])
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(
+            stdout.getvalue().strip().splitlines(),
+            [
+                f"Watchlist: {watchlist}",
+                "No symbols configured.",
+            ],
+        )
+
+    def test_add_command_writes_watchlist_csv(self) -> None:
+        stdout = StringIO()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist = Path(tmpdir) / "watchlist.csv"
+
+            with redirect_stdout(stdout):
+                exit_code = main(["add", "AAPL", "Apple", "--watchlist", str(watchlist)])
+
+            with open(watchlist, newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue().strip(), f"Saved AAPL,Apple to {watchlist}")
+        self.assertEqual(rows, [{"symbol": "AAPL", "label": "Apple"}])
+
+    def test_add_command_normalizes_trailing_comma_in_symbol(self) -> None:
+        stdout = StringIO()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist = Path(tmpdir) / "watchlist.csv"
+
+            with redirect_stdout(stdout):
+                exit_code = main(["add", "AAPL,", "Apple Inc.", "--watchlist", str(watchlist)])
+
+            with open(watchlist, newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue().strip(), f"Saved AAPL,Apple Inc. to {watchlist}")
+        self.assertEqual(rows, [{"symbol": "AAPL", "label": "Apple Inc."}])
+
+    def test_add_command_rejects_existing_symbol_when_input_symbol_has_trailing_comma(self) -> None:
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist = Path(tmpdir) / "watchlist.csv"
+            watchlist.write_text("symbol,label\nAAPL,Apple\n", encoding="utf-8")
+
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                exit_code = main(["add", "AAPL,", "Apple Inc.", "--watchlist", str(watchlist)])
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("Error: symbol AAPL is already in the watchlist with label Apple", stderr.getvalue())
+
+    def test_add_command_writes_watchlist_csv_without_label(self) -> None:
+        stdout = StringIO()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist = Path(tmpdir) / "watchlist.csv"
+
+            with redirect_stdout(stdout):
+                exit_code = main(["add", "SPY", "--watchlist", str(watchlist)])
+
+            with open(watchlist, newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue().strip(), f"Saved SPY to {watchlist}")
+        self.assertEqual(rows, [{"symbol": "SPY", "label": ""}])
+
+    def test_add_command_rejects_existing_symbol_with_different_case(self) -> None:
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist = Path(tmpdir) / "watchlist.csv"
+            watchlist.write_text("symbol,label\naapl,Apple\n", encoding="utf-8")
+
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                exit_code = main(["add", "AAPL", "Apple Inc", "--watchlist", str(watchlist)])
+
+            with open(watchlist, newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("Error: symbol AAPL is already in the watchlist with label Apple", stderr.getvalue())
+        self.assertEqual(rows, [{"symbol": "aapl", "label": "Apple"}])
+
+    def test_remove_command_deletes_symbol(self) -> None:
+        stdout = StringIO()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist = Path(tmpdir) / "watchlist.csv"
+            watchlist.write_text("symbol,label\nAAPL,Apple\nSPY,S&P 500 ETF\n", encoding="utf-8")
+
+            with redirect_stdout(stdout):
+                exit_code = main(["remove", "SPY", "--watchlist", str(watchlist)])
+
+            with open(watchlist, newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue().strip(), f"Removed SPY,S&P 500 ETF from {watchlist}")
+        self.assertEqual(rows, [{"symbol": "AAPL", "label": "Apple"}])
+
+    def test_remove_command_deletes_symbol_without_label(self) -> None:
+        stdout = StringIO()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist = Path(tmpdir) / "watchlist.csv"
+            watchlist.write_text("symbol,label\nAAPL,Apple\nSPY,\n", encoding="utf-8")
+
+            with redirect_stdout(stdout):
+                exit_code = main(["remove", "SPY", "--watchlist", str(watchlist)])
+
+            with open(watchlist, newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue().strip(), f"Removed SPY from {watchlist}")
+        self.assertEqual(rows, [{"symbol": "AAPL", "label": "Apple"}])
+
+    def test_fetch_command_defaults_to_watchlist_csv(self) -> None:
+        stdout = StringIO()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist = Path(tmpdir) / "watchlist.csv"
+            watchlist.write_text("symbol,label\nAAPL,Apple\n", encoding="utf-8")
+
+            with patch("yfinance_watchlist.cli.YahooFinanceClient.fetch_quote") as fetch_quote, patch(
+                "yfinance_watchlist.cli.YahooFinanceClient.fetch_history_year"
+            ) as fetch_history_year, patch(
+                "yfinance_watchlist.cli._utc_now",
+                return_value=datetime(2026, 4, 24, 9, 5, tzinfo=timezone.utc),
+            ):
+                fetch_quote.return_value = QuoteSnapshot(
+                    symbol="AAPL",
+                    currency="USD",
+                    market_price=123.45,
+                    market_time=datetime(2026, 4, 24, tzinfo=timezone.utc),
+                )
+                fetch_history_year.return_value = [self._history_row("2026-01-02T00:00:00+00:00", 0.0)]
+
+                with chdir(tmpdir), redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "fetch",
+                            "--output",
+                            tmpdir,
+                            "--start-year",
+                            "2026",
+                            "--end-year",
+                            "2026",
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Loaded 1 symbols from watchlist.csv", stdout.getvalue())
+
     @patch("yfinance_watchlist.cli.YahooFinanceClient.fetch_quote")
     def test_quote_command_prints_summary(self, fetch_quote) -> None:
         fetch_quote.return_value = QuoteSnapshot(
@@ -241,6 +434,21 @@ class CliTestCase(TestCase):
         self.assertEqual(len(manifest["years"]), 3)
         self.assertEqual(manifest["years"][-1]["source"], "failed")
         self.assertIn("quote data for BAD is missing regular market price", stderr.getvalue())
+
+    def test_remove_command_prints_error_for_missing_symbol(self) -> None:
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist = Path(tmpdir) / "watchlist.csv"
+            watchlist.write_text("symbol,label\nAAPL,Apple\n", encoding="utf-8")
+
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                exit_code = main(["remove", "SPY", "--watchlist", str(watchlist)])
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("Error: symbol SPY is not in the watchlist", stderr.getvalue())
 
     @staticmethod
     def _history_row(timestamp: str, dividend: float) -> PriceHistoryRow:

@@ -121,15 +121,19 @@ class YahooFinanceClient:
             rows.append(
                 PriceHistoryRow(
                     timestamp=normalized_timestamp,
-                    open=float(row["Open"]),
-                    high=float(row["High"]),
-                    low=float(row["Low"]),
-                    close=float(row["Close"]),
+                    open=self._round_history_value(row["Open"]),
+                    high=self._round_history_value(row["High"]),
+                    low=self._round_history_value(row["Low"]),
+                    close=self._round_history_value(row["Close"]),
                     volume=int(volume),
-                    dividend=float(dividend),
+                    dividend=self._round_history_value(dividend),
                 )
             )
         return rows
+
+    @staticmethod
+    def _round_history_value(value: object) -> float:
+        return round(float(value), 2)
 
     @staticmethod
     def _normalize_timestamp(value: object) -> datetime:

@@ -71,8 +71,10 @@ class YahooFinanceClientTestCase(TestCase):
         self.assertEqual(calls[0].kwargs["start"], "2024-01-01")
         self.assertEqual(calls[0].kwargs["end"], "2025-01-01")
         self.assertEqual(calls[0].kwargs["interval"], "1d")
+        self.assertTrue(calls[0].kwargs["auto_adjust"])
         self.assertEqual(calls[1].kwargs["start"], "2025-01-01")
         self.assertEqual(calls[1].kwargs["end"], "2026-01-01")
+        self.assertTrue(calls[1].kwargs["auto_adjust"])
 
     @patch("yfinance_watchlist.client.yf.Ticker")
     def test_fetch_history_uses_current_year_through_today(self, ticker_cls: MagicMock) -> None:

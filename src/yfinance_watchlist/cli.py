@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import argparse
-from datetime import date, datetime, timezone, timedelta
+from datetime import datetime, timezone
 from pathlib import Path
 import sys
 
 from .cache import HistoryCache
 from .client import YahooFinanceClient
+from .models import PriceHistoryRow
 from .results import FetchRunSummary, SymbolYearResult
 from .store import FileStore
 from .watchlist import WatchlistReader, WatchlistStore
@@ -169,8 +170,8 @@ def run_fetch_command(
             quote_error = str(exc)
             print(f"Error: {quote_error}", file=sys.stderr)
 
-        for year in range(start_year, end_year + 1):
-            if quote_error is not None:
+        if quote_error is not None:
+            for year in range(start_year, end_year + 1):
                 summary.add_result(
                     SymbolYearResult(
                         symbol=entry.symbol,
@@ -185,35 +186,18 @@ def run_fetch_command(
                     summary.stopped_early = True
                     stop_processing = True
                     break
-                continue
+            if stop_processing:
+                break
+            continue
 
-            try:
-                source, path, row_count, last_timestamp = _resolve_history(client, cache, entry.symbol, year)
-                summary.add_result(
-                    SymbolYearResult(
-                        symbol=entry.symbol,
-                        label=entry.label,
-                        year=year,
-                        status="success",
-                        source=source,
-                        path=path,
-                        row_count=row_count,
-                        last_timestamp=last_timestamp,
-                    )
-                )
-            except ValueError as exc:
-                print(f"Error: {exc}", file=sys.stderr)
-                summary.add_result(
-                    SymbolYearResult(
-                        symbol=entry.symbol,
-                        label=entry.label,
-                        year=year,
-                        status="failed",
-                        source="failed",
-                        error=str(exc),
-                    )
-                )
-                if fail_fast:
+        results = _resolve_symbol_history(client, cache, entry.symbol, start_year, end_year)
+        for result in results:
+            if result.error is not None:
+                print(f"Error: {result.error}", file=sys.stderr)
+            result.label = entry.label
+            summary.add_result(result)
+            if fail_fast:
+                if result.source == "failed":
                     summary.stopped_early = True
                     stop_processing = True
                     break
@@ -246,44 +230,176 @@ def run_fetch_command(
     return 0 if summary.satisfied_years > 0 else 1
 
 
-def _resolve_history(
+def _resolve_symbol_history(
+    client: YahooFinanceClient,
+    cache: HistoryCache,
+    symbol: str,
+    start_year: int,
+    end_year: int,
+) -> list[SymbolYearResult]:
+    today = client._today()
+    current_year = today.year
+    cached_years = cache.years_for_symbol(symbol)
+    symbol_has_cache = bool(cached_years)
+    current_year_rows: list[PriceHistoryRow] | None = None
+    refresh_cached_years = False
+    refresh_check_error: str | None = None
+    refreshed_rows_by_year: dict[int, list[PriceHistoryRow]] = {}
+    refresh_errors_by_year: dict[int, str] = {}
+
+    if symbol_has_cache:
+        try:
+            current_year_rows = client.fetch_history_year(symbol, current_year)
+        except ValueError as exc:
+            refresh_check_error = str(exc)
+        else:
+            cached_adjustment = cache.latest_adjustment_timestamp(symbol)
+            latest_adjustment = _latest_adjustment_timestamp(current_year_rows)
+            refresh_cached_years = (
+                latest_adjustment is not None
+                and (cached_adjustment is None or latest_adjustment > cached_adjustment)
+            )
+
+    if refresh_cached_years:
+        for year in cached_years:
+            try:
+                rows = (
+                    current_year_rows
+                    if year == current_year and current_year_rows is not None
+                    else client.fetch_history_year(symbol, year)
+                )
+            except ValueError as exc:
+                refresh_errors_by_year[year] = str(exc)
+                continue
+            cache.write_year(symbol, year, rows)
+            refreshed_rows_by_year[year] = rows
+
+    results: list[SymbolYearResult] = []
+    for year in range(start_year, end_year + 1):
+        if year in refresh_errors_by_year:
+            results.append(
+                SymbolYearResult(
+                    symbol=symbol,
+                    label=None,
+                    year=year,
+                    status="failed",
+                    source="failed",
+                    error=refresh_errors_by_year[year],
+                )
+            )
+            continue
+
+        if year in refreshed_rows_by_year:
+            rows = refreshed_rows_by_year[year]
+            results.append(
+                SymbolYearResult(
+                    symbol=symbol,
+                    label=None,
+                    year=year,
+                    status="success",
+                    source="cache_refresh",
+                    path=str(cache.year_path(symbol, year)),
+                    row_count=len(rows),
+                    last_timestamp=rows[-1].timestamp if rows else None,
+                )
+            )
+            continue
+
+        if refresh_check_error is not None and cache.has_year(symbol, year):
+            results.append(
+                SymbolYearResult(
+                    symbol=symbol,
+                    label=None,
+                    year=year,
+                    status="failed",
+                    source="failed",
+                    error=refresh_check_error,
+                )
+            )
+            continue
+
+        try:
+            rows, source = _resolve_year_history(
+                client=client,
+                cache=cache,
+                symbol=symbol,
+                year=year,
+                current_year=current_year,
+                current_year_rows=current_year_rows,
+                refresh_cached_years=refresh_cached_years,
+            )
+        except ValueError as exc:
+            results.append(
+                SymbolYearResult(
+                    symbol=symbol,
+                    label=None,
+                    year=year,
+                    status="failed",
+                    source="failed",
+                    error=str(exc),
+                )
+            )
+            continue
+
+        path = cache.year_path(symbol, year)
+        last_timestamp = rows[-1].timestamp if rows else None
+        results.append(
+            SymbolYearResult(
+                symbol=symbol,
+                label=None,
+                year=year,
+                status="success",
+                source=source,
+                path=str(path),
+                row_count=len(rows),
+                last_timestamp=last_timestamp,
+            )
+        )
+    return results
+
+
+def _resolve_year_history(
+    *,
     client: YahooFinanceClient,
     cache: HistoryCache,
     symbol: str,
     year: int,
-) -> tuple[str, str, int, datetime | None]:
-    today = client._today()
-    is_current_year = year == today.year
-    if cache.has_year(symbol, year):
-        if not is_current_year:
-            path = cache.year_path(symbol, year)
-            rows = cache.read_year(symbol, year)
-            last_timestamp = cache.latest_timestamp(symbol, year)
-            return "cache_hit", str(path), len(rows), last_timestamp
+    current_year: int,
+    current_year_rows: list[PriceHistoryRow] | None,
+    refresh_cached_years: bool,
+) -> tuple[list[PriceHistoryRow], str]:
+    is_current_year = year == current_year
+    has_cached_year = cache.has_year(symbol, year)
 
-        latest = cache.latest_timestamp(symbol, year)
-        if latest is not None and latest.date() >= today:
-            path = cache.year_path(symbol, year)
-            rows = cache.read_year(symbol, year)
-            return "cache_hit", str(path), len(rows), latest
+    if refresh_cached_years and has_cached_year:
+        rows = current_year_rows if is_current_year and current_year_rows is not None else client.fetch_history_year(symbol, year)
+        cache.write_year(symbol, year, rows)
+        return rows, "cache_refresh"
 
-        start_date = date(year, 1, 1) if latest is None else latest.date() + timedelta(days=1)
-        end_date = today + timedelta(days=1)
-        new_rows = client.fetch_history_year(symbol, year, start_date=start_date, end_date=end_date)
-        if not new_rows:
-            path = cache.year_path(symbol, year)
-            last_timestamp = cache.latest_timestamp(symbol, year)
-            rows = cache.read_year(symbol, year)
-            return "cache_hit", str(path), len(rows), last_timestamp
-        path = cache.merge_year(symbol, year, new_rows)
-        last_timestamp = cache.latest_timestamp(symbol, year)
-        rows = cache.read_year(symbol, year)
-        return "cache_refresh", path, len(rows), last_timestamp
+    if has_cached_year and not is_current_year:
+        return cache.read_year(symbol, year), "cache_hit"
+
+    if is_current_year:
+        rows = current_year_rows if current_year_rows is not None else client.fetch_history_year(symbol, year)
+        if not has_cached_year:
+            cache.write_year(symbol, year, rows)
+            return rows, "fetched"
+
+        cached_rows = cache.read_year(symbol, year)
+        if cached_rows == rows:
+            return cached_rows, "cache_hit"
+
+        cache.write_year(symbol, year, rows)
+        return rows, "cache_refresh"
 
     rows = client.fetch_history_year(symbol, year)
-    path = cache.write_year(symbol, year, rows)
-    last_timestamp = cache.latest_timestamp(symbol, year)
-    return "fetched", path, len(rows), last_timestamp
+    cache.write_year(symbol, year, rows)
+    return rows, "fetched"
+
+
+def _latest_adjustment_timestamp(rows: list[PriceHistoryRow]) -> datetime | None:
+    timestamps = [row.timestamp for row in rows if row.dividend != 0 or row.stock_splits != 0]
+    return max(timestamps, default=None)
 
 
 def _utc_now() -> datetime:

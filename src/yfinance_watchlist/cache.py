@@ -49,6 +49,25 @@ class HistoryCache:
             return None
         return datetime.fromisoformat(timestamp)
 
+    def latest_adjustment_timestamp(self, symbol: str) -> datetime | None:
+        symbol_entries = self._load_index().get("symbols", {}).get(symbol, {})
+        timestamps = []
+        for entry in symbol_entries.values():
+            timestamp = entry.get("latest_adjustment_timestamp")
+            if timestamp:
+                timestamps.append(datetime.fromisoformat(timestamp))
+        return max(timestamps, default=None)
+
+    def years_for_symbol(self, symbol: str) -> list[int]:
+        symbol_entries = self._load_index().get("symbols", {}).get(symbol, {})
+        years = []
+        for year in symbol_entries:
+            try:
+                years.append(int(year))
+            except ValueError:
+                continue
+        return sorted(years)
+
     def write_year(self, symbol: str, year: int, rows: list[PriceHistoryRow]) -> str:
         path = self.year_path(symbol, year)
         self._write_rows(path, rows)
@@ -100,9 +119,18 @@ class HistoryCache:
         index = self._load_index()
         index.setdefault("symbols", {}).setdefault(symbol, {})
         latest = max((row.timestamp for row in rows), default=None)
+        latest_adjustment = max(
+            (
+                row.timestamp
+                for row in rows
+                if row.dividend != 0 or row.stock_splits != 0
+            ),
+            default=None,
+        )
         index["symbols"][symbol][str(year)] = {
             "path": str(path.relative_to(self.output_dir)),
             "latest_timestamp": latest.isoformat() if latest else None,
+            "latest_adjustment_timestamp": latest_adjustment.isoformat() if latest_adjustment else None,
             "row_count": len(rows),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }

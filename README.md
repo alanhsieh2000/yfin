@@ -78,14 +78,14 @@ Historical cache files are shared across runs:
     data/cache/history/<symbol>/<year>.csv
     data/cache/history_index.json
 
-Each yearly history row includes `timestamp`, OHLC data, `volume`, `dividend`, and `stock_splits`. Past years are reused as `cache_hit` when already present. The current year may be updated as `cache_refresh` when newer rows become available after an earlier run.
+Each yearly history row includes `timestamp`, auto-adjusted OHLC data, `volume`, `dividend`, and `stock_splits`. Past years are reused as `cache_hit` when already present. The current year is compared against a fresh Yahoo Finance pull, and any newly observed dividend or split forces `cache_refresh` for every cached year of that symbol because adjusted prices for earlier dates become stale.
 
 ## Manifest Interpretation
 
 `manifest.json` records top-level counts and one entry per requested symbol-year. The `source` field uses these values:
 
-- `cache_hit`: an existing past-year file, or a current-year file already current through today
-- `cache_refresh`: a current-year file that had newer rows appended
+- `cache_hit`: an existing year file that still matches the latest adjusted history
+- `cache_refresh`: a cached year rewritten because the current year changed or a new dividend/split made older adjusted prices stale
 - `fetched`: a year fetched from Yahoo Finance for the first time
 - `failed`: a quote or history request that could not be satisfied
 

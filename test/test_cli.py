@@ -361,6 +361,134 @@ class CliTestCase(TestCase):
         self.assertIn("quote data for BAD is missing regular market price", stderr.getvalue())
 
     @patch("yfinance_watchlist.cli._utc_now", return_value=datetime(2026, 4, 24, 9, 5, tzinfo=timezone.utc))
+    @patch("yfinance_watchlist.cli.YahooFinanceClient.fetch_history_year")
+    @patch("yfinance_watchlist.cli.YahooFinanceClient.fetch_quote")
+    @patch("yfinance_watchlist.cli.YahooFinanceClient._today", return_value=date(2026, 4, 24))
+    def test_fetch_command_refreshes_all_cached_years_after_new_dividend(
+        self,
+        _today,
+        fetch_quote,
+        fetch_history_year,
+        _utc_now,
+    ) -> None:
+        fetch_quote.return_value = QuoteSnapshot(
+            "AAPL", "USD", 123.45, datetime(2026, 4, 24, tzinfo=timezone.utc)
+        )
+        fetch_history_year.side_effect = [
+            [self._history_row("2026-01-02T00:00:00+00:00", 0.0), self._history_row("2026-04-24T00:00:00+00:00", 0.35)],
+            [self._history_row("2025-01-02T00:00:00+00:00", 0.0)],
+        ]
+        stdout = StringIO()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist = Path(tmpdir) / "watchlist.csv"
+            watchlist.write_text("symbol,label\nAAPL,Apple\n", encoding="utf-8")
+
+            from yfinance_watchlist.cache import HistoryCache
+
+            cache = HistoryCache(tmpdir)
+            cache.write_year("AAPL", 2025, [self._history_row("2025-01-02T00:00:00+00:00", 0.0)])
+            cache.write_year("AAPL", 2026, [self._history_row("2026-01-02T00:00:00+00:00", 0.0)])
+
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "fetch",
+                        "--watchlist",
+                        str(watchlist),
+                        "--output",
+                        tmpdir,
+                        "--start-year",
+                        "2025",
+                        "--end-year",
+                        "2026",
+                    ]
+                )
+
+            manifest_path = Path(tmpdir) / "2026-04-24T09-05Z" / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual([item["source"] for item in manifest["years"]], ["cache_refresh", "cache_refresh"])
+        self.assertEqual(manifest["cached_years"], 0)
+        self.assertEqual(manifest["refreshed_years"], 2)
+        self.assertIn("Completed: 0 cache hit, 2 refreshed, 0 fetched, 0 failed", stdout.getvalue())
+
+    @patch("yfinance_watchlist.cli._utc_now", return_value=datetime(2026, 4, 24, 9, 5, tzinfo=timezone.utc))
+    @patch("yfinance_watchlist.cli.YahooFinanceClient.fetch_history_year")
+    @patch("yfinance_watchlist.cli.YahooFinanceClient.fetch_quote")
+    @patch("yfinance_watchlist.cli.YahooFinanceClient._today", return_value=date(2026, 4, 24))
+    def test_fetch_command_refreshes_prior_cached_years_when_fetching_new_year_after_new_dividend(
+        self,
+        _today,
+        fetch_quote,
+        fetch_history_year,
+        _utc_now,
+    ) -> None:
+        fetch_quote.return_value = QuoteSnapshot(
+            "AAPL", "USD", 123.45, datetime(2026, 4, 24, tzinfo=timezone.utc)
+        )
+        stdout = StringIO()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist = Path(tmpdir) / "watchlist.csv"
+            watchlist.write_text("symbol,label\nAAPL,Apple\n", encoding="utf-8")
+
+            from yfinance_watchlist.cache import HistoryCache
+
+            cache = HistoryCache(tmpdir)
+            original_2025_rows = [self._history_row("2025-01-02T00:00:00+00:00", 0.0)]
+            cache.write_year("AAPL", 2025, original_2025_rows)
+            refreshed_2025_payload = [
+                PriceHistoryRow(
+                    timestamp=datetime(2025, 1, 2, tzinfo=timezone.utc),
+                    open=95.0,
+                    high=96.0,
+                    low=94.0,
+                    close=95.5,
+                    volume=1000,
+                    dividend=0.0,
+                    stock_splits=0.0,
+                )
+            ]
+            fetch_history_year.side_effect = [
+                [
+                    self._history_row("2026-01-02T00:00:00+00:00", 0.0),
+                    self._history_row("2026-04-24T00:00:00+00:00", 0.35),
+                ],
+                refreshed_2025_payload,
+            ]
+
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "fetch",
+                        "--watchlist",
+                        str(watchlist),
+                        "--output",
+                        tmpdir,
+                        "--start-year",
+                        "2026",
+                        "--end-year",
+                        "2026",
+                    ]
+                )
+
+            manifest_path = Path(tmpdir) / "2026-04-24T09-05Z" / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            refreshed_2025_rows = cache.read_year("AAPL", 2025)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual([item["source"] for item in manifest["years"]], ["fetched"])
+        self.assertEqual(manifest["cached_years"], 0)
+        self.assertEqual(manifest["refreshed_years"], 0)
+        self.assertEqual(manifest["fetched_years"], 1)
+        self.assertEqual(fetch_history_year.call_count, 2)
+        self.assertEqual(fetch_history_year.call_args_list[1].args, ("AAPL", 2025))
+        self.assertEqual(refreshed_2025_rows, refreshed_2025_payload)
+        self.assertIn("Completed: 0 cache hit, 0 refreshed, 1 fetched, 0 failed", stdout.getvalue())
+
+    @patch("yfinance_watchlist.cli._utc_now", return_value=datetime(2026, 4, 24, 9, 5, tzinfo=timezone.utc))
     @patch("yfinance_watchlist.cli.YahooFinanceClient.fetch_quote")
     def test_fetch_command_returns_non_zero_when_all_years_fail(self, fetch_quote, _utc_now) -> None:
         fetch_quote.side_effect = ValueError("quote data for BAD is missing regular market price")

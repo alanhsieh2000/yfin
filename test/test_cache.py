@@ -53,6 +53,18 @@ class HistoryCacheTestCase(TestCase):
         self.assertEqual(latest, datetime(2026, 4, 24, tzinfo=timezone.utc))
         self.assertEqual(rows, [row])
 
+    def test_latest_adjustment_timestamp_tracks_latest_dividend_or_split_for_symbol(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = HistoryCache(tmpdir)
+            cache.write_year("AAPL", 2025, [self._row("2025-01-02T00:00:00+00:00", 0.25)])
+            cache.write_year("AAPL", 2026, [self._row("2026-01-03T00:00:00+00:00", 0.0, 2.0)])
+
+            latest_adjustment = cache.latest_adjustment_timestamp("AAPL")
+            years = cache.years_for_symbol("AAPL")
+
+        self.assertEqual(latest_adjustment, datetime(2026, 1, 3, tzinfo=timezone.utc))
+        self.assertEqual(years, [2025, 2026])
+
     def test_write_year_stores_history_values_rounded_to_two_decimals(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             cache = HistoryCache(tmpdir)

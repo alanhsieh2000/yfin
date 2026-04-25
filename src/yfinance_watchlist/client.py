@@ -230,7 +230,7 @@ class YahooFinanceClient:
                     end=end_date.isoformat(),
                     interval="1d",
                     actions=True,
-                    auto_adjust=False,
+                    auto_adjust=True,
                 )
             except Exception as exc:
                 raise ValueError(

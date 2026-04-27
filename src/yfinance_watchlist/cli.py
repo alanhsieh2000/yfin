@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 from pathlib import Path
+import re
+import shutil
 import sys
 
 from .cache import HistoryCache
@@ -14,6 +16,8 @@ from .watchlist import WatchlistReader, WatchlistStore
 
 
 DEFAULT_WATCHLIST_PATH = "watchlist.csv"
+DEFAULT_KEEP_RUNS = 10
+_RUN_DIR_PATTERN = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}Z)(?:-(\d+))?$")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -41,6 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     fetch_parser.add_argument("--start-year", type=int, required=True)
     fetch_parser.add_argument("--end-year", type=int, required=True)
     fetch_parser.add_argument("--fail-fast", action="store_true")
+    fetch_parser.add_argument("--keep-runs", type=int, default=DEFAULT_KEEP_RUNS)
 
     return parser
 
@@ -79,6 +84,7 @@ def main(argv: list[str] | None = None) -> int:
             args.start_year,
             args.end_year,
             fail_fast=args.fail_fast,
+            keep_runs=args.keep_runs,
         )
 
     parser.error(f"unsupported command: {args.command}")
@@ -142,9 +148,13 @@ def run_fetch_command(
     start_year: int,
     end_year: int,
     fail_fast: bool = False,
+    keep_runs: int = DEFAULT_KEEP_RUNS,
 ) -> int:
     if start_year > end_year:
         print("Error: start_year must be less than or equal to end_year", file=sys.stderr)
+        return 1
+    if keep_runs < 1:
+        print("Error: keep_runs must be greater than or equal to 1", file=sys.stderr)
         return 1
 
     client = YahooFinanceClient()
@@ -212,9 +222,11 @@ def run_fetch_command(
         "quotes_path": quotes_path,
         "start_year": start_year,
         "end_year": end_year,
+        "keep_runs": keep_runs,
         **summary.to_manifest_dict(),
     }
     manifest_path = store.write_manifest(run_dir, manifest)
+    _prune_run_dirs(output_dir, keep_runs)
 
     print(f"Loaded {len(entries)} symbols from {watchlist_path}")
     print(f"Wrote outputs to {run_dir}")
@@ -415,6 +427,27 @@ def _make_run_dir(output_dir: str) -> str:
         counter += 1
     run_dir.mkdir(parents=True, exist_ok=False)
     return str(run_dir)
+
+
+def _prune_run_dirs(output_dir: str, keep_runs: int) -> None:
+    run_dirs = sorted(_list_run_dirs(output_dir), key=_run_dir_sort_key, reverse=True)
+    for path in run_dirs[keep_runs:]:
+        shutil.rmtree(path)
+
+
+def _list_run_dirs(output_dir: str) -> list[Path]:
+    root = Path(output_dir)
+    if not root.exists():
+        return []
+    return [path for path in root.iterdir() if path.is_dir() and _RUN_DIR_PATTERN.fullmatch(path.name)]
+
+
+def _run_dir_sort_key(path: Path) -> tuple[datetime, int]:
+    match = _RUN_DIR_PATTERN.fullmatch(path.name)
+    if match is None:
+        raise ValueError(f"invalid run directory name: {path.name}")
+    stamp, suffix = match.groups()
+    return datetime.strptime(stamp, "%Y-%m-%dT%H-%MZ"), int(suffix or 0)
 
 
 if __name__ == "__main__":

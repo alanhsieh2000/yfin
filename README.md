@@ -60,6 +60,10 @@ Fetch quotes plus yearly daily history for a watchlist:
 
     PYTHONPATH=src python -m yfinance_watchlist.cli fetch --output data --start-year 2025 --end-year 2026
 
+By default, fetch keeps the 10 newest timestamped run directories under the output root. Override that limit when needed:
+
+    PYTHONPATH=src python -m yfinance_watchlist.cli fetch --output data --start-year 2025 --end-year 2026 --keep-runs 20
+
 To stop on the first symbol-year failure instead of continuing:
 
     PYTHONPATH=src python -m yfinance_watchlist.cli fetch --output data --start-year 2025 --end-year 2026 --fail-fast
@@ -72,6 +76,8 @@ Each fetch command writes a new run directory under the chosen output root:
 
     data/<run-date>/quotes.csv
     data/<run-date>/manifest.json
+
+The fetch command automatically prunes older timestamped run directories after writing the current run. By default it keeps the newest 10 run directories, and `--keep-runs` changes that retention count. This cleanup only applies to timestamped run directories under the selected output root; it does not delete `data/cache/` or unrelated directories.
 
 Historical cache files are shared across runs:
 

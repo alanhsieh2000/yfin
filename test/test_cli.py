@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
 
-from yfinance_watchlist.cli import main
+from yfinance_watchlist.cli import DEFAULT_KEEP_RUNS, main
 from yfinance_watchlist.models import PriceHistoryRow, QuoteSnapshot
 
 
@@ -288,6 +288,7 @@ class CliTestCase(TestCase):
             self.assertTrue(history_index.exists())
             self.assertEqual(len(manifest["years"]), 4)
             self.assertTrue(all(item["source"] == "fetched" for item in manifest["years"]))
+            self.assertEqual(manifest["keep_runs"], DEFAULT_KEEP_RUNS)
             self.assertEqual(manifest["status"], "success")
             self.assertEqual(manifest["fetched_years"], 4)
             self.assertEqual(manifest["failed_years"], 0)
@@ -563,6 +564,118 @@ class CliTestCase(TestCase):
         self.assertEqual(manifest["years"][-1]["source"], "failed")
         self.assertIn("quote data for BAD is missing regular market price", stderr.getvalue())
 
+    @patch("yfinance_watchlist.cli._utc_now", return_value=datetime(2026, 4, 24, 9, 5, tzinfo=timezone.utc))
+    @patch("yfinance_watchlist.cli.YahooFinanceClient.fetch_history_year")
+    @patch("yfinance_watchlist.cli.YahooFinanceClient.fetch_quote")
+    def test_fetch_command_prunes_old_run_dirs_with_default_retention(
+        self, fetch_quote, fetch_history_year, _utc_now
+    ) -> None:
+        fetch_quote.return_value = QuoteSnapshot(
+            "AAPL", "USD", 123.45, datetime(2026, 4, 24, tzinfo=timezone.utc)
+        )
+        fetch_history_year.return_value = [self._history_row("2026-01-02T00:00:00+00:00", 0.0)]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist = Path(tmpdir) / "watchlist.csv"
+            watchlist.write_text("symbol,label\nAAPL,Apple\n", encoding="utf-8")
+            cache_dir = Path(tmpdir) / "cache" / "history"
+            cache_dir.mkdir(parents=True)
+            for index in range(DEFAULT_KEEP_RUNS):
+                run_dir = Path(tmpdir) / f"2026-04-24T08-{index:02d}Z"
+                run_dir.mkdir()
+                (run_dir / "manifest.json").write_text("{}", encoding="utf-8")
+
+            exit_code = main(
+                [
+                    "fetch",
+                    "--watchlist",
+                    str(watchlist),
+                    "--output",
+                    tmpdir,
+                    "--start-year",
+                    "2026",
+                    "--end-year",
+                    "2026",
+                ]
+            )
+
+            run_dirs = self._run_dir_names(tmpdir)
+            cache_exists = cache_dir.exists()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(len(run_dirs), DEFAULT_KEEP_RUNS)
+        self.assertIn("2026-04-24T09-05Z", run_dirs)
+        self.assertNotIn("2026-04-24T08-00Z", run_dirs)
+        self.assertTrue(cache_exists)
+
+    @patch("yfinance_watchlist.cli._utc_now", return_value=datetime(2026, 4, 24, 9, 5, tzinfo=timezone.utc))
+    @patch("yfinance_watchlist.cli.YahooFinanceClient.fetch_history_year")
+    @patch("yfinance_watchlist.cli.YahooFinanceClient.fetch_quote")
+    def test_fetch_command_honors_keep_runs_override_and_preserves_unrelated_dirs(
+        self, fetch_quote, fetch_history_year, _utc_now
+    ) -> None:
+        fetch_quote.return_value = QuoteSnapshot(
+            "AAPL", "USD", 123.45, datetime(2026, 4, 24, tzinfo=timezone.utc)
+        )
+        fetch_history_year.return_value = [self._history_row("2026-01-02T00:00:00+00:00", 0.0)]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist = Path(tmpdir) / "watchlist.csv"
+            watchlist.write_text("symbol,label\nAAPL,Apple\n", encoding="utf-8")
+            notes_dir = Path(tmpdir) / "notes"
+            notes_dir.mkdir()
+            for stamp in ["2026-04-24T08-00Z", "2026-04-24T08-01Z", "2026-04-24T08-02Z"]:
+                (Path(tmpdir) / stamp).mkdir()
+
+            exit_code = main(
+                [
+                    "fetch",
+                    "--watchlist",
+                    str(watchlist),
+                    "--output",
+                    tmpdir,
+                    "--start-year",
+                    "2026",
+                    "--end-year",
+                    "2026",
+                    "--keep-runs",
+                    "3",
+                ]
+            )
+
+            run_dirs = self._run_dir_names(tmpdir)
+            manifest = json.loads((Path(tmpdir) / "2026-04-24T09-05Z" / "manifest.json").read_text(encoding="utf-8"))
+            notes_exists = notes_dir.exists()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(run_dirs, ["2026-04-24T08-01Z", "2026-04-24T08-02Z", "2026-04-24T09-05Z"])
+        self.assertTrue(notes_exists)
+        self.assertEqual(manifest["keep_runs"], 3)
+
+    def test_fetch_command_rejects_keep_runs_less_than_one(self) -> None:
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "fetch",
+                        "--output",
+                        tmpdir,
+                        "--start-year",
+                        "2026",
+                        "--end-year",
+                        "2026",
+                        "--keep-runs",
+                        "0",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("Error: keep_runs must be greater than or equal to 1", stderr.getvalue())
+
     def test_remove_command_prints_error_for_missing_symbol(self) -> None:
         stdout = StringIO()
         stderr = StringIO()
@@ -591,3 +704,7 @@ class CliTestCase(TestCase):
             dividend=dividend,
             stock_splits=0.0,
         )
+
+    @staticmethod
+    def _run_dir_names(root: str) -> list[str]:
+        return sorted(path.name for path in Path(root).iterdir() if path.is_dir() and path.name[:4].isdigit())

@@ -70,6 +70,25 @@ To stop on the first symbol-year failure instead of continuing:
 
 All watchlist management commands default to `watchlist.csv`, and `fetch` reads the same file unless `--watchlist` is provided explicitly.
 
+## MCP Server
+
+Start the local FastMCP HTTP server from the repository root:
+
+    PYTHONPATH=src python -m yfinance_watchlist.mcp_server --host 127.0.0.1 --port 8000 --path /mcp/
+
+MCP clients can connect to:
+
+    http://127.0.0.1:8000/mcp/
+
+The server exposes these tools:
+
+- `get_quote(symbol)`: fetch a single live quote.
+- `get_history(symbol, start_year, end_year)`: fetch normalized daily history rows for an inclusive year range.
+- `list_watchlist(watchlist_path="watchlist.csv")`: read watchlist entries.
+- `fetch_watchlist(start_year, end_year, watchlist_path="watchlist.csv", output_dir="data", fail_fast=false, keep_runs=10)`: run the same batch fetch workflow as the CLI and return the generated manifest and output paths.
+
+For file arguments, the MCP server accepts relative paths under its base directory only. Use `--base-dir <path>` when starting the server to choose a different root for `watchlist_path` and `output_dir`.
+
 ## Output Layout
 
 Each fetch command writes a new run directory under the chosen output root:

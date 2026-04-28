@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import shutil
 import sys
+from typing import Callable
 
 from .cache import HistoryCache
 from .client import YahooFinanceClient
@@ -150,23 +151,56 @@ def run_fetch_command(
     fail_fast: bool = False,
     keep_runs: int = DEFAULT_KEEP_RUNS,
 ) -> int:
+    try:
+        result = run_fetch_workflow(
+            watchlist_path,
+            output_dir,
+            start_year,
+            end_year,
+            fail_fast=fail_fast,
+            keep_runs=keep_runs,
+            on_error=lambda message: print(f"Error: {message}", file=sys.stderr),
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    manifest = result["manifest"]
+
+    print(f"Loaded {result['entries_count']} symbols from {watchlist_path}")
+    print(f"Wrote outputs to {result['run_dir']}")
+    print(f"History cache updated under {Path(output_dir) / 'cache' / 'history'}")
+    print(f"Manifest: {result['manifest_path']}")
+    print(
+        "Completed: "
+        f"{manifest['cached_years']} cache hit, "
+        f"{manifest['refreshed_years']} refreshed, "
+        f"{manifest['fetched_years']} fetched, "
+        f"{manifest['failed_years']} failed"
+    )
+    return int(result["exit_code"])
+
+
+def run_fetch_workflow(
+    watchlist_path: str,
+    output_dir: str,
+    start_year: int,
+    end_year: int,
+    fail_fast: bool = False,
+    keep_runs: int = DEFAULT_KEEP_RUNS,
+    on_error: Callable[[str], None] | None = None,
+) -> dict:
     if start_year > end_year:
-        print("Error: start_year must be less than or equal to end_year", file=sys.stderr)
-        return 1
+        raise ValueError("start_year must be less than or equal to end_year")
     if keep_runs < 1:
-        print("Error: keep_runs must be greater than or equal to 1", file=sys.stderr)
-        return 1
+        raise ValueError("keep_runs must be greater than or equal to 1")
 
     client = YahooFinanceClient()
     reader = WatchlistReader()
     store = FileStore()
     cache = HistoryCache(output_dir)
 
-    try:
-        entries = reader.load(watchlist_path)
-    except ValueError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 1
+    entries = reader.load(watchlist_path)
 
     run_dir = _make_run_dir(output_dir)
     summary = FetchRunSummary(run_dir=run_dir)
@@ -178,7 +212,8 @@ def run_fetch_command(
             quotes.append(client.fetch_quote(entry.symbol))
         except ValueError as exc:
             quote_error = str(exc)
-            print(f"Error: {quote_error}", file=sys.stderr)
+            if on_error is not None:
+                on_error(quote_error)
 
         if quote_error is not None:
             for year in range(start_year, end_year + 1):
@@ -202,8 +237,8 @@ def run_fetch_command(
 
         results = _resolve_symbol_history(client, cache, entry.symbol, start_year, end_year)
         for result in results:
-            if result.error is not None:
-                print(f"Error: {result.error}", file=sys.stderr)
+            if result.error is not None and on_error is not None:
+                on_error(result.error)
             result.label = entry.label
             summary.add_result(result)
             if fail_fast:
@@ -228,18 +263,14 @@ def run_fetch_command(
     manifest_path = store.write_manifest(run_dir, manifest)
     _prune_run_dirs(output_dir, keep_runs)
 
-    print(f"Loaded {len(entries)} symbols from {watchlist_path}")
-    print(f"Wrote outputs to {run_dir}")
-    print(f"History cache updated under {Path(output_dir) / 'cache' / 'history'}")
-    print(f"Manifest: {manifest_path}")
-    print(
-        "Completed: "
-        f"{summary.cached_years} cache hit, "
-        f"{summary.refreshed_years} refreshed, "
-        f"{summary.fetched_years} fetched, "
-        f"{summary.failed_years} failed"
-    )
-    return 0 if summary.satisfied_years > 0 else 1
+    return {
+        "exit_code": 0 if summary.satisfied_years > 0 else 1,
+        "entries_count": len(entries),
+        "run_dir": run_dir,
+        "quotes_path": quotes_path,
+        "manifest_path": manifest_path,
+        "manifest": manifest,
+    }
 
 
 def _resolve_symbol_history(

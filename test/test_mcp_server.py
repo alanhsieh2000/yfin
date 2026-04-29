@@ -4,6 +4,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path
+import runpy
+import sys
 import tempfile
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import patch
@@ -15,6 +17,17 @@ from yfinance_watchlist.models import PriceHistoryRow, QuoteSnapshot
 
 
 class McpServerTestCase(IsolatedAsyncioTestCase):
+    async def test_server_file_loads_without_package_context(self) -> None:
+        server_path = Path(__file__).resolve().parents[1] / "src" / "yfinance_watchlist" / "mcp_server.py"
+        original_path = list(sys.path)
+        try:
+            module_globals = runpy.run_path(str(server_path))
+        finally:
+            sys.path[:] = original_path
+
+        self.assertIn("create_server", module_globals)
+        self.assertIn("mcp", module_globals)
+
     async def test_server_lists_expected_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             async with Client(create_server(tmpdir)) as client:

@@ -3,8 +3,15 @@ from __future__ import annotations
 import argparse
 from dataclasses import asdict
 from pathlib import Path
+import sys
 
 from fastmcp import FastMCP
+
+if __package__ in (None, ""):
+    package_root = str(Path(__file__).resolve().parents[1])
+    if package_root not in sys.path:
+        sys.path.insert(0, package_root)
+    __package__ = "yfinance_watchlist"
 
 from .cli import DEFAULT_KEEP_RUNS, DEFAULT_WATCHLIST_PATH, run_fetch_workflow
 from .client import YahooFinanceClient

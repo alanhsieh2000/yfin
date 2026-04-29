@@ -85,6 +85,8 @@ The server exposes these tools:
 - `get_quote(symbol)`: fetch a single live quote.
 - `get_history(symbol, start_year, end_year)`: fetch normalized daily history rows for an inclusive year range.
 - `list_watchlist(watchlist_path="watchlist.csv")`: read watchlist entries.
+- `add_watchlist_symbol(symbol, label=null, watchlist_path="watchlist.csv")`: add a symbol and optional label to a watchlist.
+- `remove_watchlist_symbol(symbol, watchlist_path="watchlist.csv")`: remove a symbol from a watchlist.
 - `fetch_watchlist(start_year, end_year, watchlist_path="watchlist.csv", output_dir="data", fail_fast=false, keep_runs=10)`: run the same batch fetch workflow as the CLI and return the generated manifest and output paths.
 
 For file arguments, the MCP server accepts relative paths under its base directory only. Use `--base-dir <path>` when starting the server to choose a different root for `watchlist_path` and `output_dir`.

@@ -58,6 +58,39 @@ def create_server(base_dir: Path | str = Path.cwd()) -> FastMCP:
         }
 
     @server.tool
+    def add_watchlist_symbol(
+        symbol: str,
+        label: str | None = None,
+        watchlist_path: str = DEFAULT_WATCHLIST_PATH,
+    ) -> dict:
+        """Add a symbol and optional label to a watchlist CSV file under the server base directory."""
+        resolved_watchlist = _resolve_relative_path(root, watchlist_path, "watchlist_path")
+        store = WatchlistStore()
+        entry = store.add_entry(str(resolved_watchlist), symbol, label)
+        entries = store.load_entries(str(resolved_watchlist))
+        return {
+            "watchlist_path": str(resolved_watchlist),
+            "entry": _watchlist_entry_to_dict(entry),
+            "count": len(entries),
+        }
+
+    @server.tool
+    def remove_watchlist_symbol(
+        symbol: str,
+        watchlist_path: str = DEFAULT_WATCHLIST_PATH,
+    ) -> dict:
+        """Remove a symbol from a watchlist CSV file under the server base directory."""
+        resolved_watchlist = _resolve_relative_path(root, watchlist_path, "watchlist_path")
+        store = WatchlistStore()
+        entry = store.remove_entry(str(resolved_watchlist), symbol)
+        entries = store.load_entries(str(resolved_watchlist))
+        return {
+            "watchlist_path": str(resolved_watchlist),
+            "entry": _watchlist_entry_to_dict(entry),
+            "count": len(entries),
+        }
+
+    @server.tool
     def fetch_watchlist(
         start_year: int,
         end_year: int,

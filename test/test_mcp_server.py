@@ -37,6 +37,8 @@ class McpServerTestCase(IsolatedAsyncioTestCase):
         self.assertIn("get_quote", names)
         self.assertIn("get_history", names)
         self.assertIn("list_watchlist", names)
+        self.assertIn("add_watchlist_symbol", names)
+        self.assertIn("remove_watchlist_symbol", names)
         self.assertIn("fetch_watchlist", names)
 
     async def test_get_quote_returns_serialized_quote(self) -> None:
@@ -107,6 +109,32 @@ class McpServerTestCase(IsolatedAsyncioTestCase):
             ],
         )
 
+    async def test_add_watchlist_symbol_writes_relative_path_under_base_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            async with Client(create_server(tmpdir)) as client:
+                result = await client.call_tool(
+                    "add_watchlist_symbol",
+                    {"symbol": "aapl,", "label": ", Apple Inc."},
+                )
+                list_result = await client.call_tool("list_watchlist", {})
+
+        self.assertEqual(result.data["entry"], {"symbol": "AAPL", "label": "Apple Inc."})
+        self.assertEqual(result.data["count"], 1)
+        self.assertEqual(list_result.data["entries"], [{"symbol": "AAPL", "label": "Apple Inc."}])
+
+    async def test_remove_watchlist_symbol_writes_relative_path_under_base_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist = Path(tmpdir) / "watchlist.csv"
+            watchlist.write_text("symbol,label\nAAPL,Apple\nSPY,S&P 500 ETF\n", encoding="utf-8")
+
+            async with Client(create_server(tmpdir)) as client:
+                result = await client.call_tool("remove_watchlist_symbol", {"symbol": "spy"})
+                list_result = await client.call_tool("list_watchlist", {})
+
+        self.assertEqual(result.data["entry"], {"symbol": "SPY", "label": "S&P 500 ETF"})
+        self.assertEqual(result.data["count"], 1)
+        self.assertEqual(list_result.data["entries"], [{"symbol": "AAPL", "label": "Apple"}])
+
     async def test_fetch_watchlist_writes_manifest_and_quotes(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             watchlist = Path(tmpdir) / "watchlist.csv"
@@ -173,8 +201,28 @@ class McpServerTestCase(IsolatedAsyncioTestCase):
                         },
                         raise_on_error=False,
                     )
+                    add_result = await client.call_tool(
+                        "add_watchlist_symbol",
+                        {
+                            "watchlist_path": "../watchlist.csv",
+                            "symbol": "AAPL",
+                        },
+                        raise_on_error=False,
+                    )
+                    remove_result = await client.call_tool(
+                        "remove_watchlist_symbol",
+                        {
+                            "watchlist_path": "/tmp/watchlist.csv",
+                            "symbol": "AAPL",
+                        },
+                        raise_on_error=False,
+                    )
 
         self.assertTrue(parent_result.is_error)
         self.assertIn("watchlist_path must stay under", parent_result.content[0].text)
         self.assertTrue(absolute_result.is_error)
         self.assertIn("watchlist_path must be a relative path", absolute_result.content[0].text)
+        self.assertTrue(add_result.is_error)
+        self.assertIn("watchlist_path must stay under", add_result.content[0].text)
+        self.assertTrue(remove_result.is_error)
+        self.assertIn("watchlist_path must be a relative path", remove_result.content[0].text)

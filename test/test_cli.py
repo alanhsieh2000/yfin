@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
 
-from yfinance_watchlist.cli import DEFAULT_KEEP_RUNS, main
+from yfinance_watchlist.cli import DEFAULT_KEEP_RUNS, DEFAULT_WATCHLIST_PATH, main
 from yfinance_watchlist.models import PriceHistoryRow, QuoteSnapshot
 
 
@@ -170,11 +170,12 @@ class CliTestCase(TestCase):
         self.assertEqual(stdout.getvalue().strip(), f"Removed SPY from {watchlist}")
         self.assertEqual(rows, [{"symbol": "AAPL", "label": "Apple"}])
 
-    def test_fetch_command_defaults_to_watchlist_csv(self) -> None:
+    def test_fetch_command_defaults_to_data_watchlist_csv(self) -> None:
         stdout = StringIO()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            watchlist = Path(tmpdir) / "watchlist.csv"
+            watchlist = Path(tmpdir) / DEFAULT_WATCHLIST_PATH
+            watchlist.parent.mkdir()
             watchlist.write_text("symbol,label\nAAPL,Apple\n", encoding="utf-8")
 
             with patch("yfinance_watchlist.cli.YahooFinanceClient.fetch_quote") as fetch_quote, patch(
@@ -205,7 +206,7 @@ class CliTestCase(TestCase):
                     )
 
         self.assertEqual(exit_code, 0)
-        self.assertIn("Loaded 1 symbols from watchlist.csv", stdout.getvalue())
+        self.assertIn(f"Loaded 1 symbols from {DEFAULT_WATCHLIST_PATH}", stdout.getvalue())
 
     @patch("yfinance_watchlist.cli.YahooFinanceClient.fetch_quote")
     def test_quote_command_prints_summary(self, fetch_quote) -> None:

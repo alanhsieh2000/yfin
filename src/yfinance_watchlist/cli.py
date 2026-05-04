@@ -16,7 +16,7 @@ from .store import FileStore
 from .watchlist import WatchlistReader, WatchlistStore
 
 
-DEFAULT_WATCHLIST_PATH = "watchlist.csv"
+DEFAULT_WATCHLIST_PATH = "data/watchlist.csv"
 DEFAULT_KEEP_RUNS = 10
 _RUN_DIR_PATTERN = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}Z)(?:-(\d+))?$")
 

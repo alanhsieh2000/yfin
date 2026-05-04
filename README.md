@@ -34,11 +34,11 @@ Fetch a single live quote:
 
     PYTHONPATH=src python -m yfinance_watchlist.cli quote AAPL
 
-Show the current watchlist stored in `watchlist.csv`:
+Show the current watchlist stored in `data/watchlist.csv`:
 
     PYTHONPATH=src python -m yfinance_watchlist.cli show
 
-Add or update a symbol and optional label in `watchlist.csv`:
+Add or update a symbol and optional label in `data/watchlist.csv`:
 
     PYTHONPATH=src python -m yfinance_watchlist.cli add AAPL Apple
 
@@ -52,7 +52,7 @@ You can also add a symbol without a label:
 
     PYTHONPATH=src python -m yfinance_watchlist.cli add SPY
 
-Remove a symbol from `watchlist.csv`:
+Remove a symbol from `data/watchlist.csv`:
 
     PYTHONPATH=src python -m yfinance_watchlist.cli remove AAPL
 
@@ -68,7 +68,7 @@ To stop on the first symbol-year failure instead of continuing:
 
     PYTHONPATH=src python -m yfinance_watchlist.cli fetch --output data --start-year 2025 --end-year 2026 --fail-fast
 
-All watchlist management commands default to `watchlist.csv`, and `fetch` reads the same file unless `--watchlist` is provided explicitly.
+All watchlist management commands default to `data/watchlist.csv`, and `fetch` reads the same file unless `--watchlist` is provided explicitly. This keeps mutable watchlist data in the same `data/` tree as fetch outputs and cache files, which is useful when `data/` is a read/write volume in a container.
 
 ## MCP Server
 
@@ -84,17 +84,20 @@ The server exposes these tools:
 
 - `get_quote(symbol)`: fetch a single live quote.
 - `get_history(symbol, start_year, end_year)`: fetch normalized daily history rows for an inclusive year range.
-- `list_watchlist(watchlist_path="watchlist.csv")`: read watchlist entries.
-- `add_watchlist_symbol(symbol, label=null, watchlist_path="watchlist.csv")`: add a symbol and optional label to a watchlist.
-- `remove_watchlist_symbol(symbol, watchlist_path="watchlist.csv")`: remove a symbol from a watchlist.
-- `fetch_watchlist(start_year, end_year, watchlist_path="watchlist.csv", output_dir="data", fail_fast=false, keep_runs=10)`: run the same batch fetch workflow as the CLI and return the generated manifest and output paths.
+- `list_watchlist(watchlist_path="data/watchlist.csv")`: read watchlist entries.
+- `add_watchlist_symbol(symbol, label=null, watchlist_path="data/watchlist.csv")`: add a symbol and optional label to a watchlist.
+- `remove_watchlist_symbol(symbol, watchlist_path="data/watchlist.csv")`: remove a symbol from a watchlist.
+- `fetch_watchlist(start_year, end_year, watchlist_path="data/watchlist.csv", output_dir="data", fail_fast=false, keep_runs=10)`: run the same batch fetch workflow as the CLI and return the generated manifest and output paths.
 
 For file arguments, the MCP server accepts relative paths under its base directory only. Use `--base-dir <path>` when starting the server to choose a different root for `watchlist_path` and `output_dir`.
+
+For container deployments, mount a writable volume at the server base directory's `data/` folder. For example, if the application runs under `/workspace`, mount host storage to `/workspace/data` and start the server from `/workspace` or pass `--base-dir /workspace`.
 
 ## Output Layout
 
 Each fetch command writes a new run directory under the chosen output root:
 
+    data/watchlist.csv
     data/<run-date>/quotes.csv
     data/<run-date>/manifest.json
 

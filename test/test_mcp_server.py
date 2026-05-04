@@ -94,7 +94,8 @@ class McpServerTestCase(IsolatedAsyncioTestCase):
 
     async def test_list_watchlist_reads_relative_path_under_base_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            watchlist = Path(tmpdir) / "watchlist.csv"
+            watchlist = Path(tmpdir) / "data" / "watchlist.csv"
+            watchlist.parent.mkdir()
             watchlist.write_text("symbol,label\nAAPL,Apple\nSPY,S&P 500 ETF\n", encoding="utf-8")
 
             async with Client(create_server(tmpdir)) as client:
@@ -124,7 +125,8 @@ class McpServerTestCase(IsolatedAsyncioTestCase):
 
     async def test_remove_watchlist_symbol_writes_relative_path_under_base_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            watchlist = Path(tmpdir) / "watchlist.csv"
+            watchlist = Path(tmpdir) / "data" / "watchlist.csv"
+            watchlist.parent.mkdir()
             watchlist.write_text("symbol,label\nAAPL,Apple\nSPY,S&P 500 ETF\n", encoding="utf-8")
 
             async with Client(create_server(tmpdir)) as client:
@@ -137,7 +139,8 @@ class McpServerTestCase(IsolatedAsyncioTestCase):
 
     async def test_fetch_watchlist_writes_manifest_and_quotes(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            watchlist = Path(tmpdir) / "watchlist.csv"
+            watchlist = Path(tmpdir) / "data" / "watchlist.csv"
+            watchlist.parent.mkdir()
             watchlist.write_text("symbol,label\nAAPL,Apple\n", encoding="utf-8")
 
             with patch("yfinance_watchlist.cli._utc_now") as utc_now, patch(

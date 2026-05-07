@@ -10,13 +10,15 @@ TestCase class of unittest. These classes implement proper test cases for the py
 
 ## Setup
 
-Install dependencies from the repository root:
+Create or update the uv-managed environment from the repository root:
 
-    pip install -r requirements.txt
+    uv sync
 
 Run the test suite with:
 
-    PYTHONPATH=src python -m unittest discover -s test -v
+    PYTHONPATH=src uv run python -m unittest discover -s test -v
+
+This project uses a `src/` layout, so keep `PYTHONPATH=src` on local commands unless the package is installed into the active environment.
 
 ## Watchlist Format
 
@@ -32,41 +34,41 @@ Example:
 
 Fetch a single live quote:
 
-    PYTHONPATH=src python -m yfinance_watchlist.cli quote AAPL
+    PYTHONPATH=src uv run python -m yfinance_watchlist.cli quote AAPL
 
 Show the current watchlist stored in `data/watchlist.csv`:
 
-    PYTHONPATH=src python -m yfinance_watchlist.cli show
+    PYTHONPATH=src uv run python -m yfinance_watchlist.cli show
 
 Add or update a symbol and optional label in `data/watchlist.csv`:
 
-    PYTHONPATH=src python -m yfinance_watchlist.cli add AAPL Apple
+    PYTHONPATH=src uv run python -m yfinance_watchlist.cli add AAPL Apple
 
 If the label contains spaces, quote it so the shell passes it as one argument:
 
-    PYTHONPATH=src python -m yfinance_watchlist.cli add AAPL "Apple Inc."
+    PYTHONPATH=src uv run python -m yfinance_watchlist.cli add AAPL "Apple Inc."
 
 If you accidentally type a comma after the symbol, such as `AAPL,`, the command still stores the symbol as `AAPL`.
 
 You can also add a symbol without a label:
 
-    PYTHONPATH=src python -m yfinance_watchlist.cli add SPY
+    PYTHONPATH=src uv run python -m yfinance_watchlist.cli add SPY
 
 Remove a symbol from `data/watchlist.csv`:
 
-    PYTHONPATH=src python -m yfinance_watchlist.cli remove AAPL
+    PYTHONPATH=src uv run python -m yfinance_watchlist.cli remove AAPL
 
 Fetch quotes plus yearly daily history for a watchlist:
 
-    PYTHONPATH=src python -m yfinance_watchlist.cli fetch --output data --start-year 2025 --end-year 2026
+    PYTHONPATH=src uv run python -m yfinance_watchlist.cli fetch --output data --start-year 2025 --end-year 2026
 
 By default, fetch keeps the 10 newest timestamped run directories under the output root. Override that limit when needed:
 
-    PYTHONPATH=src python -m yfinance_watchlist.cli fetch --output data --start-year 2025 --end-year 2026 --keep-runs 20
+    PYTHONPATH=src uv run python -m yfinance_watchlist.cli fetch --output data --start-year 2025 --end-year 2026 --keep-runs 20
 
 To stop on the first symbol-year failure instead of continuing:
 
-    PYTHONPATH=src python -m yfinance_watchlist.cli fetch --output data --start-year 2025 --end-year 2026 --fail-fast
+    PYTHONPATH=src uv run python -m yfinance_watchlist.cli fetch --output data --start-year 2025 --end-year 2026 --fail-fast
 
 All watchlist management commands default to `data/watchlist.csv`, and `fetch` reads the same file unless `--watchlist` is provided explicitly. This keeps mutable watchlist data in the same `data/` tree as fetch outputs and cache files, which is useful when `data/` is a read/write volume in a container.
 
@@ -74,7 +76,7 @@ All watchlist management commands default to `data/watchlist.csv`, and `fetch` r
 
 Start the local FastMCP HTTP server from the repository root:
 
-    PYTHONPATH=src python -m yfinance_watchlist.mcp_server --host 127.0.0.1 --port 8000 --path /mcp/
+    PYTHONPATH=src uv run python -m yfinance_watchlist.mcp_server --host 127.0.0.1 --port 8000 --path /mcp/
 
 MCP clients can connect to:
 

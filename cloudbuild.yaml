@@ -3,16 +3,16 @@ steps:
   args: ['pull']
 - name: 'gcr.io/cloud-builders/docker'
   args:
-    - 'build'
-    - '--build-arg'
-    - 'USER_NAME=${USER}'
-    - '--build-arg'
-    - 'USER_UID=${_USER_UID}'
-    - '--target'
-    - 'production'
-    - '-t'
-    - $_IMAGE
-    - '.'
+  - 'build'
+  - '--build-arg'
+  - 'USER_NAME=${_USER_NAME}'
+  - '--build-arg'
+  - 'USER_UID=${_USER_UID}'
+  - '--target'
+  - 'production'
+  - '-t'
+  - $_IMAGE
+  - '.'
   timeout: 300s
 - name: 'gcr.io/cloud-builders/docker'
   args: ['push', $_IMAGE]
@@ -22,6 +22,7 @@ options:
   automapSubstitutions: true
   logging: CLOUD_LOGGING_ONLY
 substitutions:
+  _USER_NAME: 'alanhsieh2000'
   _USER_UID: '1000'
   _LOCATION: 'us-west1'
   _REPOSITORY: 'yfin-mcp-server-images'

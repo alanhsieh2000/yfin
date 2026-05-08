@@ -1,4 +1,5 @@
 steps:
+# build the container image
 - name: 'gcr.io/cloud-builders/docker'
   args:
   - 'build'
@@ -12,9 +13,28 @@ steps:
   - $_IMAGE
   - '.'
   timeout: 300s
+# push the image to Artifact Registry
 - name: 'gcr.io/cloud-builders/docker'
   args: ['push', $_IMAGE]
   timeout: 300s
+# deploy to Cloud Run with GCS bucket
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: gcloud
+  args:
+  - 'run'
+  - 'deploy'
+  - $_SERVICE_NAME
+  - '--image'
+  - $_IMAGE
+  - '--region'
+  - $_LOCATION
+  - '--execution-environment'
+  - 'gen2'
+  - '--add-volume'
+  - 'name=${_VOLUME_NAME},type=cloud-storage,bucket=${_BUCKET}'
+  - '--add-volume-mount'
+  - 'volume=${_VOLUME_NAME},mount-path=${_MOUNT_PATH}'
+  - '--allow-unauthenticated'
 images: [$_IMAGE]
 options:
   dynamicSubstitutions: true
@@ -28,4 +48,8 @@ substitutions:
   _NAME: 'yfin'
   _VERSION: '1.0.0'
   _IMAGE: '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_NAME}:${_VERSION}'
+  _SERVICE_NAME: 'yfin-mcp-service'
+  _VOLUME_NAME: 'data'
+  _BUCKET: 'yfin-mcp-server-data-v2'
+  _MOUNT_PATH: '/app/data'
 serviceAccount: 'projects/${PROJECT_ID}/serviceAccounts/builder@${PROJECT_ID}.iam.gserviceaccount.com'

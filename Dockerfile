@@ -52,10 +52,10 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1
 
 # install required python packages
-COPY . /app
+COPY pyproject.toml uv.lock src/ /app/
 RUN uv sync --frozen --no-install-project --no-dev
 
 USER ${USER_NAME}
 
 # run the server
-#CMD ["uv", "run", ""]
+CMD ["uv", "run", "python", "-m", "yfinance_watchlist.mcp_server", "--host", "127.0.0.1", "--port", "8000", "--path", "/mcp/"]

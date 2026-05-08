@@ -58,4 +58,6 @@ RUN uv sync --frozen --no-install-project --no-dev
 USER ${USER_NAME}
 
 # run the server
-CMD ["uv", "run", "python", "-m", "yfinance_watchlist.mcp_server", "--host", "127.0.0.1", "--port", "8080", "--path", "/mcp/"]
+ENV PORT=8080
+EXPOSE 8080
+CMD ["sh", "-c", "uv run python -m yfinance_watchlist.mcp_server --host 0.0.0.0 --port $PORT --path /mcp/"]

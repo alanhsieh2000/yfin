@@ -48,7 +48,9 @@ substitutions:
   _LOCATION: 'us-west1'
   _REPOSITORY: 'yfin-mcp-server-images'
   _NAME: 'yfin'
-  _IMAGE: '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_NAME}:${SHORT_SHA}'
+  # use gcloud builds submit --config=cloudbuild.yaml --substitutions=_VERSION=$(git rev-parse --short HEAD)
+  _VERSION: $SHORT_SHA
+  _IMAGE: '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_NAME}:${_VERSION}'
   _SERVICE_NAME: 'yfin-mcp-service'
   _VOLUME_NAME: 'data'
   _BUCKET: 'yfin-mcp-server-data-v2'

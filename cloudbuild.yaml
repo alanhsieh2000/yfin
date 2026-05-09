@@ -30,6 +30,8 @@ steps:
   - $_LOCATION
   - '--execution-environment'
   - 'gen2'
+  - '--service-account'
+  - 'runtime@${PROJECT_ID}.iam.gserviceaccount.com'
   - '--add-volume'
   - 'name=${_VOLUME_NAME},type=cloud-storage,bucket=${_BUCKET}'
   - '--add-volume-mount'
@@ -46,8 +48,7 @@ substitutions:
   _LOCATION: 'us-west1'
   _REPOSITORY: 'yfin-mcp-server-images'
   _NAME: 'yfin'
-  _VERSION: '1.0.0'
-  _IMAGE: '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_NAME}:${_VERSION}'
+  _IMAGE: '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_NAME}:${SHORT_SHA}'
   _SERVICE_NAME: 'yfin-mcp-service'
   _VOLUME_NAME: 'data'
   _BUCKET: 'yfin-mcp-server-data-v2'

@@ -36,7 +36,7 @@ def create_server(base_dir: Path | str = Path.cwd()) -> FastMCP:
     )
     server = FastMCP("yfinance-watchlist", auth=auth)
 
-    @mcp.tool
+    @server.tool
     def whoami() -> dict:
         """Provide the content of the access token to tell who is calling."""   
         token = get_access_token()

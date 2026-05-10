@@ -4,8 +4,11 @@ import argparse
 from dataclasses import asdict
 from pathlib import Path
 import sys
+import os
 
 from fastmcp import FastMCP
+from fastmcp.server.auth.providers.google import GoogleProvider
+from fastmcp.server.dependencies import get_access_token
 
 if __package__ in (None, ""):
     package_root = str(Path(__file__).resolve().parents[1])
@@ -26,7 +29,21 @@ DEFAULT_PATH = "/mcp/"
 
 def create_server(base_dir: Path | str = Path.cwd()) -> FastMCP:
     root = Path(base_dir).resolve()
-    server = FastMCP("yfinance-watchlist")
+    auth = GoogleProvider(
+        client_id=os.environ["CLIENT_ID"],
+        client_secret=os.environ["CLIENT_SECRET"],
+        base_url=os.environ["BASE_URL"],
+    )
+    server = FastMCP("yfinance-watchlist", auth=auth)
+
+    @mcp.tool
+    def whoami() -> dict:
+        """Provide the content of the access token to tell who is calling."""   
+        token = get_access_token()
+        return {
+            "claims": token.claims if token else {},
+            "scopes": token.scopes if token else [],
+        }
 
     @server.tool
     def get_quote(symbol: str) -> dict:

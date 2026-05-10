@@ -37,6 +37,10 @@ steps:
   - '--add-volume-mount'
   - 'volume=${_VOLUME_NAME},mount-path=${_MOUNT_PATH}'
   - '--allow-unauthenticated'
+  - '--set-env-vars'
+  - 'BASE_URL=https://yfin-mcp-service-329134811342.us-west1.run.app,CLIENT_ID=${_CLIENT_ID}'
+  - '--set-secrets'
+  - 'CLIENT_SECRET=google-client-secret:latest'
 images: [$_IMAGE]
 options:
   dynamicSubstitutions: true
@@ -55,4 +59,6 @@ substitutions:
   _VOLUME_NAME: 'data'
   _BUCKET: 'yfin-mcp-server-data-v2'
   _MOUNT_PATH: '/app/data'
+  # use --substitutions=_VERSION=$(git rev-parse --short HEAD),_CLIENT_ID=xxx
+  _CLIENT_ID: 'google-client-id'
 serviceAccount: 'projects/${PROJECT_ID}/serviceAccounts/builder@${PROJECT_ID}.iam.gserviceaccount.com'

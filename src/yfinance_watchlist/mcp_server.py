@@ -7,7 +7,7 @@ import sys
 import os
 
 from fastmcp import FastMCP
-from fastmcp.server.auth.providers.google import GoogleProvider
+#from fastmcp.server.auth.providers.google import GoogleProvider
 from fastmcp.server.dependencies import get_access_token
 
 if __package__ in (None, ""):
@@ -29,12 +29,13 @@ DEFAULT_PATH = "/mcp/"
 
 def create_server(base_dir: Path | str = Path.cwd()) -> FastMCP:
     root = Path(base_dir).resolve()
-    auth = GoogleProvider(
-        client_id=os.environ["CLIENT_ID"],
-        client_secret=os.environ["CLIENT_SECRET"],
-        base_url=os.environ["BASE_URL"],
-    )
-    server = FastMCP("yfinance-watchlist", auth=auth)
+#    auth = GoogleProvider(
+#        client_id=os.environ["CLIENT_ID"],
+#        client_secret=os.environ["CLIENT_SECRET"],
+#        base_url=os.environ["BASE_URL"],
+#    )
+#    server = FastMCP("yfinance-watchlist", auth=auth)
+    server = FastMCP("yfinance-watchlist")
 
     @server.tool
     def whoami() -> dict:

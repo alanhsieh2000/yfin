@@ -39,7 +39,7 @@ steps:
   - '--allow-unauthenticated'
   - '--set-env-vars'
 #  - 'BASE_URL=https://yfin-mcp-service-329134811342.us-west1.run.app,CLIENT_ID=${_CLIENT_ID}'
-  - 'FASTMCP_SERVER_AUTH=fastmcp.server.auth.providers.google.GoogleProvider,FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_ID="${_CLIENT_ID}"'
+  - 'FASTMCP_SERVER_AUTH=fastmcp.server.auth.providers.google.GoogleProvider,FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_ID=${_CLIENT_ID}'
   - '--set-secrets'
 #  - 'CLIENT_SECRET=google-client-secret:latest'
   - 'FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_SECRET=google-client-secret:latest'

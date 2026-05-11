@@ -42,7 +42,7 @@ steps:
   - 'FASTMCP_SERVER_AUTH=fastmcp.server.auth.providers.google.GoogleProvider,FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_ID="${_CLIENT_ID}"'
   - '--set-secrets'
 #  - 'CLIENT_SECRET=google-client-secret:latest'
-  - 'FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_SECRET="google-client-secret:latest"'
+  - 'FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_SECRET=google-client-secret:latest'
 images: [$_IMAGE]
 options:
   dynamicSubstitutions: true

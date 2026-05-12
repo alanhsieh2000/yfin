@@ -29,13 +29,13 @@ DEFAULT_PATH = "/mcp/"
 
 def create_server(base_dir: Path | str = Path.cwd()) -> FastMCP:
     root = Path(base_dir).resolve()
-#    auth = GoogleProvider(
-#        client_id=os.environ["CLIENT_ID"],
-#        client_secret=os.environ["CLIENT_SECRET"],
-#        base_url=os.environ["BASE_URL"],
-#    )
-#    server = FastMCP("yfinance-watchlist", auth=auth)
-    server = FastMCP("yfinance-watchlist")
+    auth = GoogleProvider(
+        client_id=os.environ["FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_ID"],
+        client_secret=os.environ["FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_SECRET"],
+        base_url=os.environ["FASTMCP_SERVER_AUTH_GOOGLE_BASE_URL"],
+    )
+    server = FastMCP("yfinance-watchlist", auth=auth)
+#    server = FastMCP("yfinance-watchlist")
 
     @server.tool
     def whoami() -> dict:

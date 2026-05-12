@@ -38,15 +38,6 @@ def create_server(base_dir: Path | str = Path.cwd()) -> FastMCP:
     server = FastMCP("yfinance-watchlist", auth=auth)
 
     @server.tool
-    def whoami() -> dict:
-        """Provide the content of the access token to tell who is calling."""   
-        token = get_access_token()
-        return {
-            "claims": token.claims if token else {},
-            "scopes": token.scopes if token else [],
-        }
-
-    @server.tool
     def get_quote(symbol: str) -> dict:
         """Fetch a single Yahoo Finance quote."""
         quote = YahooFinanceClient().fetch_quote(symbol)

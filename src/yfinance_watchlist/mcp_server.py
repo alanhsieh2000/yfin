@@ -33,10 +33,9 @@ def create_server(base_dir: Path | str = Path.cwd()) -> FastMCP:
         client_id=os.environ["FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_ID"],
         client_secret=os.environ["FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_SECRET"],
         base_url=os.environ["FASTMCP_SERVER_AUTH_GOOGLE_BASE_URL"],
-        required_scopes=["openid", "email", "profile"],
+        required_scopes=["openid"],
     )
     server = FastMCP("yfinance-watchlist", auth=auth)
-#    server = FastMCP("yfinance-watchlist")
 
     @server.tool
     def whoami() -> dict:

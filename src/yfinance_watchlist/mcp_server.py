@@ -7,7 +7,7 @@ import sys
 import os
 
 from fastmcp import FastMCP
-#from fastmcp.server.auth.providers.google import GoogleProvider
+from fastmcp.server.auth.providers.google import GoogleProvider
 from fastmcp.server.dependencies import get_access_token
 
 if __package__ in (None, ""):

@@ -39,7 +39,7 @@ steps:
   - '--allow-unauthenticated'
   - '--set-env-vars'
 #  - 'BASE_URL=https://yfin-mcp-service-329134811342.us-west1.run.app,CLIENT_ID=${_CLIENT_ID}'
-  - 'FASTMCP_SERVER_AUTH=fastmcp.server.auth.providers.google.GoogleProvider,FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_ID=${_CLIENT_ID}'
+  - 'FASTMCP_SERVER_AUTH=fastmcp.server.auth.providers.google.GoogleProvider,FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_ID=${_CLIENT_ID},FASTMCP_SERVER_AUTH_GOOGLE_BASE_URL=${_BASE_URL},FASTMCP_SERVER_AUTH_GOOGLE_REQUIRED_SCOPES=openid'
   - '--set-secrets'
 #  - 'CLIENT_SECRET=google-client-secret:latest'
   - 'FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_SECRET=google-client-secret:latest'
@@ -61,6 +61,7 @@ substitutions:
   _VOLUME_NAME: 'data'
   _BUCKET: 'yfin-mcp-server-data-v2'
   _MOUNT_PATH: '/app/data'
-  # use --substitutions=_VERSION=$(git rev-parse --short HEAD),_CLIENT_ID=xxx
+  # use --substitutions=_VERSION=$(git rev-parse --short HEAD),_CLIENT_ID=xxx,_BASE_URL=xxx
   _CLIENT_ID: 'google-client-id'
+  _BASE_URL: 'https://${_SERVICE_NAME}-NUMBER.${_LOCATION}.run.app'
 serviceAccount: 'projects/${PROJECT_ID}/serviceAccounts/builder@${PROJECT_ID}.iam.gserviceaccount.com'

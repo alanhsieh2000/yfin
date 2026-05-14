@@ -189,6 +189,7 @@ def run_fetch_workflow(
     fail_fast: bool = False,
     keep_runs: int = DEFAULT_KEEP_RUNS,
     on_error: Callable[[str], None] | None = None,
+    cache_output_dir: str | None = None,
 ) -> dict:
     if start_year > end_year:
         raise ValueError("start_year must be less than or equal to end_year")
@@ -198,7 +199,7 @@ def run_fetch_workflow(
     client = YahooFinanceClient()
     reader = WatchlistReader()
     store = FileStore()
-    cache = HistoryCache(output_dir)
+    cache = HistoryCache(cache_output_dir or output_dir)
 
     entries = reader.load(watchlist_path)
 

@@ -74,7 +74,12 @@ All watchlist management commands default to `data/watchlist.csv`, and `fetch` r
 
 ## MCP Server
 
-Start the local FastMCP HTTP server from the repository root:
+The MCP server is intended for authenticated HTTP use. Start the local FastMCP HTTP server from the repository root after setting the Google OAuth values and the user-key secret:
+
+    export FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_ID=<google-client-id>
+    export FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_SECRET=<google-client-secret>
+    export FASTMCP_SERVER_AUTH_GOOGLE_BASE_URL=http://127.0.0.1:8000
+    export YFIN_USER_KEY_SECRET=<random-server-secret>
 
     PYTHONPATH=src uv run python -m yfinance_watchlist.mcp_server --host 127.0.0.1 --port 8000 --path /mcp/
 
@@ -86,18 +91,29 @@ The server exposes these tools:
 
 - `get_quote(symbol)`: fetch a single live quote.
 - `get_history(symbol, start_year, end_year)`: fetch normalized daily history rows for an inclusive year range.
-- `list_watchlist(watchlist_path="data/watchlist.csv")`: read watchlist entries.
-- `add_watchlist_symbol(symbol, label=null, watchlist_path="data/watchlist.csv")`: add a symbol and optional label to a watchlist.
-- `remove_watchlist_symbol(symbol, watchlist_path="data/watchlist.csv")`: remove a symbol from a watchlist.
-- `fetch_watchlist(start_year, end_year, watchlist_path="data/watchlist.csv", output_dir="data", fail_fast=false, keep_runs=10)`: run the same batch fetch workflow as the CLI and return the generated manifest and output paths.
+- `list_watchlist()`: read the authenticated caller's watchlist entries.
+- `add_watchlist_symbol(symbol, label=null)`: add a symbol and optional label to the authenticated caller's watchlist.
+- `remove_watchlist_symbol(symbol)`: remove a symbol from the authenticated caller's watchlist.
+- `fetch_watchlist(start_year, end_year, fail_fast=false, keep_runs=10)`: run the same batch fetch workflow as the CLI for the authenticated caller and return the generated manifest and output paths.
 
-For file arguments, the MCP server accepts relative paths under its base directory only. Use `--base-dir <path>` when starting the server to choose a different root for `watchlist_path` and `output_dir`.
+The MCP server does not accept caller-provided watchlist or output paths. It reads the authenticated Google access token, uses the token's stable `sub` claim, and derives a non-reversible user key with `YFIN_USER_KEY_SECRET`. The raw Google `sub` is not used as a directory name.
 
-For container deployments, mount a writable volume at the server base directory's `data/` folder. For example, if the application runs under `/workspace`, mount host storage to `/workspace/data` and start the server from `/workspace` or pass `--base-dir /workspace`.
+For container deployments, mount a writable volume at the server base directory's `data/` folder. For example, if the application runs under `/workspace`, mount host storage to `/workspace/data` and start the server from `/workspace` or pass `--base-dir /workspace`. The deployment also needs Secret Manager values for `FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_SECRET` and `YFIN_USER_KEY_SECRET`.
+
+MCP user-owned files are isolated under a derived user key:
+
+    data/users/<derived-user-key>/watchlist.csv
+    data/users/<derived-user-key>/runs/<run-date>/quotes.csv
+    data/users/<derived-user-key>/runs/<run-date>/manifest.json
+
+MCP history cache files are shared because they contain public market data:
+
+    data/shared/cache/history/<symbol>/<year>.csv
+    data/shared/cache/history_index.json
 
 ## Output Layout
 
-Each fetch command writes a new run directory under the chosen output root:
+Each CLI fetch command writes a new run directory under the chosen output root:
 
     data/watchlist.csv
     data/<run-date>/quotes.csv

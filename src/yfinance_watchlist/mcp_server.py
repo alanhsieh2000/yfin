@@ -3,10 +3,11 @@ from __future__ import annotations
 import argparse
 from dataclasses import asdict
 from pathlib import Path
-import sys
 import os
+import sys
 
 from fastmcp import FastMCP
+from fastmcp.server.auth import AuthProvider
 from fastmcp.server.auth.providers.google import GoogleProvider
 from fastmcp.server.dependencies import get_access_token
 
@@ -16,8 +17,13 @@ if __package__ in (None, ""):
         sys.path.insert(0, package_root)
     __package__ = "yfinance_watchlist"
 
-from .cli import DEFAULT_KEEP_RUNS, DEFAULT_WATCHLIST_PATH, run_fetch_workflow
+from .cli import DEFAULT_KEEP_RUNS, run_fetch_workflow
 from .client import YahooFinanceClient
+from .mcp_user_data import (
+    USER_KEY_SECRET_ENV,
+    McpUserDataPaths,
+    resolve_mcp_user_data_paths,
+)
 from .models import PriceHistoryRow, QuoteSnapshot, WatchlistEntry
 from .watchlist import WatchlistStore
 
@@ -25,17 +31,16 @@ from .watchlist import WatchlistStore
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
 DEFAULT_PATH = "/mcp/"
+_DEFAULT_AUTH = object()
 
 
-def create_server(base_dir: Path | str = Path.cwd()) -> FastMCP:
+def create_server(
+    base_dir: Path | str = Path.cwd(),
+    auth: AuthProvider | None | object = _DEFAULT_AUTH,
+) -> FastMCP:
     root = Path(base_dir).resolve()
-    auth = GoogleProvider(
-        client_id=os.environ["FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_ID"],
-        client_secret=os.environ["FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_SECRET"],
-        base_url=os.environ["FASTMCP_SERVER_AUTH_GOOGLE_BASE_URL"],
-        required_scopes=["openid"],
-    )
-    server = FastMCP("yfinance-watchlist", auth=auth)
+    auth_provider = _build_google_auth_from_env(required=False) if auth is _DEFAULT_AUTH else auth
+    server = FastMCP("yfinance-watchlist", auth=auth_provider)
 
     @server.tool
     def get_quote(symbol: str) -> dict:
@@ -56,12 +61,12 @@ def create_server(base_dir: Path | str = Path.cwd()) -> FastMCP:
         }
 
     @server.tool
-    def list_watchlist(watchlist_path: str = DEFAULT_WATCHLIST_PATH) -> dict:
-        """Return entries from a watchlist CSV file under the server base directory."""
-        resolved_watchlist = _resolve_relative_path(root, watchlist_path, "watchlist_path")
-        entries = WatchlistStore().load_entries(str(resolved_watchlist))
+    def list_watchlist() -> dict:
+        """Return entries from the caller's watchlist CSV file."""
+        paths = _current_user_paths(root)
+        entries = WatchlistStore().load_entries(str(paths.watchlist_path))
         return {
-            "watchlist_path": str(resolved_watchlist),
+            "watchlist_path": str(paths.watchlist_path),
             "count": len(entries),
             "entries": [_watchlist_entry_to_dict(entry) for entry in entries],
         }
@@ -70,31 +75,27 @@ def create_server(base_dir: Path | str = Path.cwd()) -> FastMCP:
     def add_watchlist_symbol(
         symbol: str,
         label: str | None = None,
-        watchlist_path: str = DEFAULT_WATCHLIST_PATH,
     ) -> dict:
-        """Add a symbol and optional label to a watchlist CSV file under the server base directory."""
-        resolved_watchlist = _resolve_relative_path(root, watchlist_path, "watchlist_path")
+        """Add a symbol and optional label to the caller's watchlist CSV file."""
+        paths = _current_user_paths(root)
         store = WatchlistStore()
-        entry = store.add_entry(str(resolved_watchlist), symbol, label)
-        entries = store.load_entries(str(resolved_watchlist))
+        entry = store.add_entry(str(paths.watchlist_path), symbol, label)
+        entries = store.load_entries(str(paths.watchlist_path))
         return {
-            "watchlist_path": str(resolved_watchlist),
+            "watchlist_path": str(paths.watchlist_path),
             "entry": _watchlist_entry_to_dict(entry),
             "count": len(entries),
         }
 
     @server.tool
-    def remove_watchlist_symbol(
-        symbol: str,
-        watchlist_path: str = DEFAULT_WATCHLIST_PATH,
-    ) -> dict:
-        """Remove a symbol from a watchlist CSV file under the server base directory."""
-        resolved_watchlist = _resolve_relative_path(root, watchlist_path, "watchlist_path")
+    def remove_watchlist_symbol(symbol: str) -> dict:
+        """Remove a symbol from the caller's watchlist CSV file."""
+        paths = _current_user_paths(root)
         store = WatchlistStore()
-        entry = store.remove_entry(str(resolved_watchlist), symbol)
-        entries = store.load_entries(str(resolved_watchlist))
+        entry = store.remove_entry(str(paths.watchlist_path), symbol)
+        entries = store.load_entries(str(paths.watchlist_path))
         return {
-            "watchlist_path": str(resolved_watchlist),
+            "watchlist_path": str(paths.watchlist_path),
             "entry": _watchlist_entry_to_dict(entry),
             "count": len(entries),
         }
@@ -103,21 +104,19 @@ def create_server(base_dir: Path | str = Path.cwd()) -> FastMCP:
     def fetch_watchlist(
         start_year: int,
         end_year: int,
-        watchlist_path: str = DEFAULT_WATCHLIST_PATH,
-        output_dir: str = "data",
         fail_fast: bool = False,
         keep_runs: int = DEFAULT_KEEP_RUNS,
     ) -> dict:
-        """Fetch quotes and yearly history for a watchlist under the server base directory."""
-        resolved_watchlist = _resolve_relative_path(root, watchlist_path, "watchlist_path")
-        resolved_output = _resolve_relative_path(root, output_dir, "output_dir")
+        """Fetch quotes and yearly history for the caller's watchlist."""
+        paths = _current_user_paths(root)
         return run_fetch_workflow(
-            str(resolved_watchlist),
-            str(resolved_output),
+            str(paths.watchlist_path),
+            str(paths.runs_root),
             start_year,
             end_year,
             fail_fast=fail_fast,
             keep_runs=keep_runs,
+            cache_output_dir=str(paths.shared_cache_root),
         )
 
     return server
@@ -135,22 +134,40 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    server = create_server(args.base_dir)
+    _require_user_key_secret_from_env()
+    server = create_server(args.base_dir, auth=_build_google_auth_from_env(required=True))
     server.run(transport="http", host=args.host, port=args.port, path=args.path)
     return 0
 
 
-def _resolve_relative_path(base_dir: Path, value: str, name: str) -> Path:
-    raw_path = Path(value)
-    if raw_path.is_absolute():
-        raise ValueError(f"{name} must be a relative path under {base_dir}")
+def _build_google_auth_from_env(required: bool) -> AuthProvider | None:
+    keys = [
+        "FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_ID",
+        "FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_SECRET",
+        "FASTMCP_SERVER_AUTH_GOOGLE_BASE_URL",
+    ]
+    values = {key: os.environ.get(key) for key in keys}
+    missing = [key for key, value in values.items() if not value]
+    if missing:
+        if required:
+            raise ValueError(f"missing required auth environment variables: {', '.join(missing)}")
+        return None
 
-    resolved = (base_dir / raw_path).resolve()
-    try:
-        resolved.relative_to(base_dir)
-    except ValueError as exc:
-        raise ValueError(f"{name} must stay under {base_dir}") from exc
-    return resolved
+    return GoogleProvider(
+        client_id=values["FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_ID"] or "",
+        client_secret=values["FASTMCP_SERVER_AUTH_GOOGLE_CLIENT_SECRET"],
+        base_url=values["FASTMCP_SERVER_AUTH_GOOGLE_BASE_URL"] or "",
+        required_scopes=["openid"],
+    )
+
+
+def _current_user_paths(root: Path) -> McpUserDataPaths:
+    return resolve_mcp_user_data_paths(root, get_access_token())
+
+
+def _require_user_key_secret_from_env() -> None:
+    if not os.environ.get(USER_KEY_SECRET_ENV):
+        raise ValueError(f"{USER_KEY_SECRET_ENV} is required")
 
 
 def _quote_to_dict(quote: QuoteSnapshot) -> dict:
